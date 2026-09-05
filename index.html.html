@@ -148,6 +148,12 @@ tr.alert td{background:var(--danger-soft)}
 .comtab .colref{font-weight:700;font-size:12px}
 .comtab .colmes{font-size:10px;color:var(--muted);font-weight:400}
 .comtab .coCell{width:52px;padding:4px;text-align:center}
+.gcmd th,.gcmd td{padding:3px 4px;text-align:center;font-size:11px;border:1px solid var(--line)}
+.gcmd .clih{background:var(--green-soft);font-weight:700}
+.gcmd .coQ,.gcmd .coL{width:44px;padding:3px;text-align:center}
+.gcmd .coRet{color:var(--muted)}
+.gcmd .coR{font-weight:600}
+.gcmd .coR.late{color:var(--danger)}
 .comtab thead th{vertical-align:bottom}
 .linerow{display:grid;grid-template-columns:1fr 110px 40px;gap:8px;align-items:end;margin-bottom:8px}
 .linerow.wide{grid-template-columns:1fr 100px 90px 1fr 40px}
@@ -792,8 +798,8 @@ tr.alert td{background:var(--danger-soft)}
 
   <!-- ============ COMMANDES (admin) ============ -->
   <section class="view" data-view="commandes">
-    <div class="vhead"><div class="eyebrow">Client</div><h2>Commandes de la semaine</h2>
-      <p>Tableau clients × types de palette. Copie la semaine précédente, génère l'ordre de production et suis les livraisons.</p></div>
+    <div class="vhead"><div class="eyebrow">Client</div><h2>Commandes &amp; suivi (Planning Prod Weekly)</h2>
+      <p>Lignes = réf palette · Colonnes = clients (Retard · Qté · Livré · Reste). Reste = Retard + Qté − Livré.</p></div>
     <div id="lock_commandes"></div>
     <div class="admin-body" data-admin="commandes">
       <div class="card">
@@ -803,15 +809,16 @@ tr.alert td{background:var(--danger-soft)}
           <div class="field" style="align-self:end"><button class="btn ghost" onclick="loadCommandesSemaine()">Charger</button></div>
         </div>
         <div class="row-actions" style="margin-bottom:10px">
-          <button class="btn ghost sm" onclick="coCopyPrev()">⬅ Copier semaine précédente</button>
+          <button class="btn ghost sm" onclick="coCopyPrev()">⬅ Copier Qté sem. précédente</button>
+          <button class="btn ghost sm" onclick="coFillLivrer()">Remplir « Livré » depuis les BL</button>
           <button class="btn ghost sm" onclick="coAddClient()">+ Client</button>
           <button class="btn ghost sm" onclick="coExcel()">Excel</button>
         </div>
         <div id="coMatrix"></div>
         <button class="btn" style="width:100%;margin-top:12px" onclick="saveCommandesSemaine()">Enregistrer la semaine</button>
       </div>
-      <div class="card"><h3>Ordre de production (proposition)</h3><p class="muted" style="margin-top:0">Totaux par type — modifiable, à valider.</p><div id="coProd"></div></div>
-      <div class="card"><h3>État — commandé / livré / reste</h3><div id="coRecap"></div></div>
+      <div class="card"><h3>Ordre de production — semaine suivante</h3><p class="muted" style="margin-top:0">Reste à produire (backlog) par référence. Modifiable, à valider.</p><div id="coProd"></div>
+        <button class="btn ghost sm" style="margin-top:8px" onclick="coProdExcel()">Excel ordre</button></div>
     </div>
     <datalist id="clientList"></datalist>
   </section>
@@ -988,7 +995,7 @@ tr.alert td{background:var(--danger-soft)}
   </section>
 </main>
 
-<div class="foot">Valorise — outil interne · <b>version 5.3-SUPABASE · 03-01 · acces admin fix</b> · <span id="userTag2"></span></div>
+<div class="foot">Valorise — outil interne · <b>version 5.4-SUPABASE · 03-01 · commandes G CMD PAL</b> · <span id="userTag2"></span></div>
 </div><!-- /appWrap -->
 <div class="toast" id="toast"></div>
 
@@ -1138,7 +1145,7 @@ async function route(action,p){
     case 'saveNoteTL':     { const id=p.rec.NID; await db.collection('notesTL').doc(id).set(Object.assign({},p.rec,{NID:id})); return {ok:true}; }
     case 'getNotesTL':     { const s=await db.collection('notesTL').get(); return {ok:true, rows:s.docs.map(function(d){return d.data();})}; }
     case 'getCommandesSemaine':  { const d=await db.collection('commandesSemaine').doc(String(p.week)).get(); return {ok:true, data:(d.exists?d.data():null)}; }
-    case 'saveCommandesSemaine': await db.collection('commandesSemaine').doc(String(p.week)).set({week:String(p.week),annee:p.annee,semaine:p.semaine,data:p.data||{},clients:p.clients||[]}); return {ok:true};
+    case 'saveCommandesSemaine': await db.collection('commandesSemaine').doc(String(p.week)).set({week:String(p.week),annee:p.annee,semaine:p.semaine,data:p.data||{},reste:p.reste||{},clients:p.clients||[]}); return {ok:true};
     case 'saveArticle':    return await fb_saveArticle(p);
     case 'deleteArticle':  await db.collection('articles').doc(String(p.ref)).delete(); return {ok:true};
     case 'saveEntree':     return await fb_saveEntree(p);
@@ -1958,53 +1965,86 @@ function saveEntree(){
     }).catch(function(err){toast(err.message,'err');});
 }
 
-/* ================= COMMANDES SEMAINE (matrice client × type) ================= */
-let CO_DATA={}, CO_CLIENTS=[], CO_COLS=[], CO_MES={};
-function coColKey(a){ return a.RefClient||a.Ref; }
+/* ================= COMMANDES & SUIVI (style G CMD PAL) ================= */
+/* CO_DATA = { ref: { client: {q:qte, l:livrer} } } ; CO_RETARD = { ref:{client:reste_semaine_precedente} } */
+let CO_DATA={}, CO_CLIENTS=[], CO_REFS=[], CO_RETARD={};
 function coMesFrom(a){ if(a.Mesure) return a.Mesure; const d=a.Designation||''; const m=d.match(/\d{2,4}\s*[x*×]\s*\d{2,4}(\s*[x*×]\s*\d{1,4})?/i); return m?m[0].replace(/\s+/g,''):d; }
-function coBuildCols(){ const seen={}; CO_COLS=[]; CO_MES={}; S.art.filter(isPF).forEach(function(a){ const k=coColKey(a); if(!k)return; if(!seen[k]){ seen[k]=1; CO_COLS.push(k); } if(!CO_MES[k]){ const mm=coMesFrom(a); if(mm) CO_MES[k]=mm; } }); CO_COLS.sort(); }
+function coType(a){ if(a.TypePalette) return a.TypePalette; const r=String(a.Ref||''); if(/-01-/.test(r))return 'PALLET NEUF'; if(/-0?2-/.test(r))return 'COUVERCLE'; if(/-03-/.test(r))return 'PALLET RECYCLER'; return a.Famille||''; }
+function coBuildRefs(){ CO_REFS=S.art.filter(isPF).map(function(a){ return {ref:a.Ref, mesure:coMesFrom(a), type:coType(a)}; })
+  .sort(function(a,b){ return String(a.ref)<String(b.ref)?-1:1; }); }
 function coWeek(){ return document.getElementById('coAnnee').value+'-'+document.getElementById('coSemaine').value; }
-function initCommandes(){ coBuildCols(); document.getElementById('coAnnee').value=S.week.annee; document.getElementById('coSemaine').value=S.week.semaine; loadCommandesSemaine(); }
-function loadCommandesSemaine(){
+function initCommandes(){ coBuildRefs(); document.getElementById('coAnnee').value=S.week.annee; document.getElementById('coSemaine').value=S.week.semaine; loadCommandesSemaine(); }
+function loadCommandesSemaine(){ const an=Number(document.getElementById('coAnnee').value), sem=Number(document.getElementById('coSemaine').value);
   document.getElementById('coMatrix').innerHTML='<div class="loading"><span class="spin"></span> …</div>';
-  api('getCommandesSemaine',{week:coWeek()}).then(function(r){ const d=r.data;
+  let pa=an,ps=sem-1; if(ps<1){pa=an-1;ps=52;}
+  Promise.all([ api('getCommandesSemaine',{week:an+'-'+sem}), api('getCommandesSemaine',{week:pa+'-'+ps}) ]).then(function(res){
+    const d=res[0].data, prev=res[1].data;
     CO_DATA=(d&&d.data)||{};
-    const saved=(d&&d.clients)||[]; CO_CLIENTS=Array.from(new Set(saved.concat(S.clients||[]).concat(Object.keys(CO_DATA))));
+    CO_RETARD=(prev&&prev.reste)||{};
+    const saved=(d&&d.clients)||[]; CO_CLIENTS=Array.from(new Set(saved.concat(S.clients||[]).filter(Boolean)));
+    if(!CO_CLIENTS.length) CO_CLIENTS=['CLIENT 1'];
     renderCommandes();
   }).catch(function(e){ document.getElementById('coMatrix').innerHTML='<div class="warnbox">'+esc(e.message)+'</div>'; });
 }
-function coGather(){ CO_DATA={}; [].forEach.call(document.querySelectorAll('#coMatrix tr[data-client]'),function(tr){ const cl=tr.dataset.client; CO_DATA[cl]={};
-  [].forEach.call(tr.querySelectorAll('.coCell'),function(inp){ const v=Number(inp.value||0); if(v){ CO_DATA[cl][inp.dataset.ref]=v; } }); }); }
-function renderCommandes(){ if(!CO_COLS.length) coBuildCols();
-  let h='<div class="tbl-wrap"><table class="comtab"><thead><tr><th style="position:sticky;left:0;background:var(--card);z-index:2">Client</th>'+CO_COLS.map(function(c){return '<th><div class="colref">'+esc(c)+'</div><div class="colmes">'+esc(CO_MES[c]||'')+'</div></th>';}).join('')+'<th>Total</th></tr></thead><tbody>';
-  CO_CLIENTS.forEach(function(cl){ const row=CO_DATA[cl]||{}; const tot=Object.keys(row).reduce(function(s,k){return s+Number(row[k]||0);},0);
-    h+='<tr data-client="'+esc(cl)+'"><td style="position:sticky;left:0;background:var(--card);font-weight:600;z-index:1">'+esc(cl)+'</td>'
-      +CO_COLS.map(function(c){return '<td><input type="number" class="coCell" data-ref="'+esc(c)+'" min="0" value="'+(row[c]?row[c]:'')+'" oninput="coRecalc()"></td>';}).join('')
-      +'<td class="coTot"><b>'+tot+'</b></td></tr>'; });
+function coGet(ref,cl){ return (CO_DATA[ref]&&CO_DATA[ref][cl])||{q:0,l:0}; }
+function coRetard(ref,cl){ return Number((CO_RETARD[ref]&&CO_RETARD[ref][cl])||0); }
+function renderCommandes(){ if(!CO_REFS.length) coBuildRefs();
+  let h='<div class="tbl-wrap"><table class="comtab gcmd"><thead>';
+  h+='<tr><th rowspan="2">Réf</th><th rowspan="2">Mesure</th><th rowspan="2">Type</th>'
+    +CO_CLIENTS.map(function(cl){return '<th colspan="4" class="clih">'+esc(cl)+'</th>';}).join('')+'</tr>';
+  h+='<tr>'+CO_CLIENTS.map(function(){return '<th>Ret.</th><th>Qté</th><th>Livré</th><th>Reste</th>';}).join('')+'</tr></thead><tbody>';
+  CO_REFS.forEach(function(r){
+    h+='<tr data-ref="'+esc(r.ref)+'"><td><b>'+esc(r.ref)+'</b></td><td>'+esc(r.mesure)+'</td><td>'+esc(r.type)+'</td>'
+      +CO_CLIENTS.map(function(cl){ const g=coGet(r.ref,cl); const ret=coRetard(r.ref,cl); const reste=ret+Number(g.q||0)-Number(g.l||0);
+        return '<td class="coRet">'+(ret||'')+'</td>'
+          +'<td><input type="number" class="coQ" data-ref="'+esc(r.ref)+'" data-cli="'+esc(cl)+'" value="'+(g.q||'')+'" oninput="coRecalc(this)"></td>'
+          +'<td><input type="number" class="coL" data-ref="'+esc(r.ref)+'" data-cli="'+esc(cl)+'" value="'+(g.l||'')+'" oninput="coRecalc(this)"></td>'
+          +'<td class="coR'+(reste>0?' late':'')+'">'+reste+'</td>'; }).join('')+'</tr>';
+  });
   h+='</tbody></table></div>';
-  document.getElementById('coMatrix').innerHTML=h; coProd(); coRecap();
+  document.getElementById('coMatrix').innerHTML=h; coProd();
 }
-function coRecalc(){ coGather(); [].forEach.call(document.querySelectorAll('#coMatrix tr[data-client]'),function(tr){ const cl=tr.dataset.client; const row=CO_DATA[cl]||{}; tr.querySelector('.coTot').innerHTML='<b>'+Object.keys(row).reduce(function(s,k){return s+Number(row[k]||0);},0)+'</b>'; }); coProd(); }
+function coRecalc(el){ const tr=el.closest('tr'); const ref=tr.dataset.ref;
+  const cli=el.dataset.cli;
+  const q=Number(tr.querySelector('.coQ[data-cli="'+cssq(cli)+'"]').value||0);
+  const l=Number(tr.querySelector('.coL[data-cli="'+cssq(cli)+'"]').value||0);
+  const ret=coRetard(ref,cli); const reste=ret+q-l;
+  // trouver la cellule Reste correspondante (juste après le coL de ce client)
+  const cell=el.parentNode.parentNode.querySelector('.coL[data-cli="'+cssq(cli)+'"]').parentNode.nextElementSibling;
+  if(cell){ cell.textContent=reste; cell.className='coR'+(reste>0?' late':''); }
+  coProd();
+}
+function cssq(s){ return String(s).replace(/"/g,'\\"'); }
+function coGather(){ CO_DATA={}; [].forEach.call(document.querySelectorAll('#coMatrix tr[data-ref]'),function(tr){ const ref=tr.dataset.ref;
+  [].forEach.call(tr.querySelectorAll('.coQ'),function(qi){ const cl=qi.dataset.cli; const q=Number(qi.value||0);
+    const li=tr.querySelector('.coL[data-cli="'+cssq(cl)+'"]'); const l=Number(li?li.value:0);
+    if(q||l){ (CO_DATA[ref]=CO_DATA[ref]||{})[cl]={q:q,l:l}; } }); }); }
+function coComputeReste(){ const reste={}; CO_REFS.forEach(function(r){ CO_CLIENTS.forEach(function(cl){ const g=coGet(r.ref,cl); const v=coRetard(r.ref,cl)+Number(g.q||0)-Number(g.l||0); if(v){ (reste[r.ref]=reste[r.ref]||{})[cl]=v; } }); }); return reste; }
 function coAddClient(){ const c=prompt('Nom du client :'); if(!c)return; if(CO_CLIENTS.indexOf(c)<0){ coGather(); CO_CLIENTS.push(c); renderCommandes(); } }
 function coCopyPrev(){ const an=Number(document.getElementById('coAnnee').value), sem=Number(document.getElementById('coSemaine').value); let pa=an,ps=sem-1; if(ps<1){pa=an-1;ps=52;}
   api('getCommandesSemaine',{week:pa+'-'+ps}).then(function(r){ const d=r.data; if(!d||!d.data){ toast('Semaine '+ps+' vide','err'); return; }
-    CO_DATA=JSON.parse(JSON.stringify(d.data)); CO_CLIENTS=(d.clients||Object.keys(CO_DATA)); renderCommandes(); toast('Copié depuis S'+ps+' ✔','ok'); }).catch(function(e){toast(e.message,'err');}); }
-function saveCommandesSemaine(){ coGather(); const clients=CO_CLIENTS.filter(function(c){return c;});
-  api('saveCommandesSemaine',{password:ADMIN_PWD,week:coWeek(),annee:Number(document.getElementById('coAnnee').value),semaine:Number(document.getElementById('coSemaine').value),data:CO_DATA,clients:clients}).then(function(){ toast('Semaine enregistrée ✔','ok'); }).catch(function(e){toast(e.message,'err');}); }
-function coProd(){ const tot={}; CO_COLS.forEach(function(c){tot[c]=0;}); Object.keys(CO_DATA).forEach(function(cl){ const row=CO_DATA[cl]||{}; Object.keys(row).forEach(function(k){ tot[k]=(tot[k]||0)+Number(row[k]||0); }); });
-  const cols=CO_COLS.filter(function(c){return tot[c]>0;});
-  document.getElementById('coProd').innerHTML= cols.length? '<div class="tbl-wrap"><table><thead><tr><th>Type</th><th>Qté à produire</th></tr></thead><tbody>'
-    +cols.map(function(c){return '<tr><td><b>'+esc(c)+'</b></td><td><input type="number" value="'+tot[c]+'" style="width:90px"></td></tr>';}).join('')+'</tbody></table></div>'
-    : '<div class="empty">Remplis le tableau pour générer la proposition.</div>'; }
-function coRecap(){ const an=Number(document.getElementById('coAnnee').value), sem=Number(document.getElementById('coSemaine').value);
+    coGather(); Object.keys(d.data).forEach(function(ref){ Object.keys(d.data[ref]).forEach(function(cl){ const q=Number(d.data[ref][cl].q||0); if(q){ (CO_DATA[ref]=CO_DATA[ref]||{}); CO_DATA[ref][cl]=Object.assign({l:0},CO_DATA[ref][cl],{q:q}); if(CO_CLIENTS.indexOf(cl)<0)CO_CLIENTS.push(cl); } }); });
+    renderCommandes(); toast('Qté copiées depuis S'+ps+' ✔','ok'); }).catch(function(e){toast(e.message,'err');}); }
+function coFillLivrer(){ const an=Number(document.getElementById('coAnnee').value), sem=Number(document.getElementById('coSemaine').value);
   const ws=weekToDate(an,sem); const we=new Date(new Date(ws).getTime()+6*864e5).toISOString().slice(0,10);
-  api('getLivraisons',{}).then(function(r){ const liv={}; (r.rows||[]).forEach(function(b){ const d=isoD(b.Date); if(d<ws||d>we)return; liv[b.Client]=(liv[b.Client]||0)+Number(b.total||0); });
-    const rows=CO_CLIENTS.map(function(cl){ const row=CO_DATA[cl]||{}; const cmd=Object.keys(row).reduce(function(s,k){return s+Number(row[k]||0);},0); const lv=liv[cl]||0; return {Client:cl,Commande:cmd,Livre:lv,Reste:cmd-lv}; }).filter(function(x){return x.Commande||x.Livre;});
-    document.getElementById('coRecap').innerHTML= rows.length? '<div class="tbl-wrap"><table><thead><tr><th>Client</th><th>Commandé</th><th>Livré</th><th>Reste</th></tr></thead><tbody>'
-      +rows.map(function(x){return '<tr><td>'+esc(x.Client)+'</td><td>'+x.Commande+'</td><td>'+x.Livre+'</td><td'+(x.Reste>0?' style="color:var(--danger);font-weight:700"':'')+'>'+x.Reste+'</td></tr>';}).join('')+'</tbody></table></div>'
-      : '<div class="empty">Aucune donnée cette semaine.</div>';
-  }).catch(function(){ document.getElementById('coRecap').innerHTML='<div class="empty">—</div>'; }); }
-function coExcel(){ coGather(); const rows=CO_CLIENTS.map(function(cl){ const o={Client:cl}; CO_COLS.forEach(function(c){o[c]=(CO_DATA[cl]&&CO_DATA[cl][c])||0;}); return o; });
+  coGather(); toast('Lecture des BL…');
+  api('getLivraisons',{}).then(function(r){ const acc={};
+    (r.rows||[]).forEach(function(b){ const dt=isoD(b.Date); if(dt<ws||dt>we)return; const cl=b.Client||''; (b.lignes||[]).forEach(function(ln){ const ref=ln.ref||ln.Ref; const q=Number(ln.qte||ln.Qte||0); if(!ref||!q)return; (acc[ref]=acc[ref]||{})[cl]=(acc[ref][cl]||0)+q; }); });
+    Object.keys(acc).forEach(function(ref){ Object.keys(acc[ref]).forEach(function(cl){ if(CO_CLIENTS.indexOf(cl)<0)CO_CLIENTS.push(cl); (CO_DATA[ref]=CO_DATA[ref]||{}); CO_DATA[ref][cl]=Object.assign({q:0},CO_DATA[ref][cl],{l:acc[ref][cl]}); }); });
+    renderCommandes(); toast('« Livré » rempli depuis les BL ✔','ok');
+  }).catch(function(e){toast(e.message,'err');}); }
+function saveCommandesSemaine(){ coGather(); const reste=coComputeReste(); const clients=CO_CLIENTS.filter(Boolean);
+  api('saveCommandesSemaine',{password:ADMIN_PWD,week:coWeek(),annee:Number(document.getElementById('coAnnee').value),semaine:Number(document.getElementById('coSemaine').value),data:CO_DATA,reste:reste,clients:clients}).then(function(){ toast('Semaine enregistrée ✔','ok'); }).catch(function(e){toast(e.message,'err');}); }
+function coProdData(){ coGather(); const need={}; CO_REFS.forEach(function(r){ let s=0; CO_CLIENTS.forEach(function(cl){ const g=coGet(r.ref,cl); const reste=coRetard(r.ref,cl)+Number(g.q||0)-Number(g.l||0); if(reste>0)s+=reste; }); if(s>0)need[r.ref]={ref:r.ref,mesure:r.mesure,type:r.type,qte:s}; }); return Object.keys(need).map(function(k){return need[k];}); }
+function coProd(){ const rows=coProdData();
+  document.getElementById('coProd').innerHTML= rows.length? '<div class="tbl-wrap"><table><thead><tr><th>Réf</th><th>Mesure</th><th>Type</th><th>À produire</th></tr></thead><tbody>'
+    +rows.map(function(x){return '<tr><td><b>'+esc(x.ref)+'</b></td><td>'+esc(x.mesure)+'</td><td>'+esc(x.type)+'</td><td><input type="number" value="'+x.qte+'" style="width:80px"></td></tr>';}).join('')+'</tbody></table></div>'
+    : '<div class="empty">Aucun reste à produire (tout livré).</div>'; }
+function coProdExcel(){ const rows=coProdData(); if(!rows.length){toast('Rien à produire','err');return;} exportExcel(rows.map(function(x){return {Ref:x.ref,Mesure:x.mesure,Type:x.type,AProduire:x.qte};}),'OrdreProd','Ordre_prod_S'+(Number(document.getElementById('coSemaine').value)+1)+'.xlsx'); }
+function coExcel(){ coGather(); const rows=[]; CO_REFS.forEach(function(r){ const o={Ref:r.ref,Mesure:r.mesure,Type:r.type}; let has=false;
+  CO_CLIENTS.forEach(function(cl){ const g=coGet(r.ref,cl); const ret=coRetard(r.ref,cl); const reste=ret+Number(g.q||0)-Number(g.l||0);
+    o[cl+' Ret']=ret; o[cl+' Qte']=g.q||0; o[cl+' Livre']=g.l||0; o[cl+' Reste']=reste; if(g.q||g.l||ret)has=true; });
+  if(has)rows.push(o); });
   exportExcel(rows,'Commandes','Commandes_S'+document.getElementById('coSemaine').value+'.xlsx'); }
 
 
