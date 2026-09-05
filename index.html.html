@@ -988,7 +988,7 @@ tr.alert td{background:var(--danger-soft)}
   </section>
 </main>
 
-<div class="foot">Valorise â€” outil interne Â· <b>version 5.2-SUPABASE Â· 03-01 Â· roles + etat prod</b> Â· <span id="userTag2"></span></div>
+<div class="foot">Valorise â€” outil interne Â· <b>version 5.3-SUPABASE Â· 03-01 Â· acces admin fix</b> Â· <span id="userTag2"></span></div>
 </div><!-- /appWrap -->
 <div class="toast" id="toast"></div>
 
@@ -1052,6 +1052,8 @@ const sbDb = {
 
 /* ============ AUTHENTIFICATION (Supabase Auth) ============ */
 let CURRENT_USER=null, CURRENT_ROLE='tl';
+const ADMIN_EMAILS=['bhar.ayman@valorise.ma'];
+function isAdminUser(){ return CURRENT_ROLE==='admin' || (CURRENT_USER && ADMIN_EMAILS.indexOf(String(CURRENT_USER.email||'').toLowerCase())>=0); }
 async function sbInit(){
   const {data}=await SB.auth.getSession();
   if(data && data.session){ CURRENT_USER=data.session.user; await sbLoadProfile(); showApp(); db=sbDb; boot(); }
@@ -1388,23 +1390,17 @@ const MODULES = {
 let ROLE=null, CURMOD=null;
 
 function applyRoleUI(){
-  const r=CURRENT_ROLE||'tl';
-  const allow={admin:['tl','admin','liv','z2'], tl:['tl'], liv:['liv'], zone2:['z2']}[r]||['tl'];
+  const admin=isAdminUser();
   document.querySelectorAll('.portal .rolecard').forEach(function(c){
-    const cls=c.classList.contains('admin')?'admin':(c.classList.contains('tl')?'tl':(c.classList.contains('liv')?'liv':(c.classList.contains('z2')?'z2':'')));
-    c.style.display = allow.indexOf(cls)>=0 ? '' : 'none';
+    if(c.classList.contains('admin')) c.style.display = admin ? '' : 'none';
+    else c.style.display = '';
   });
-  if(r==='admin'){ const inp=document.getElementById('adminPwd'); if(inp)inp.style.display='none';
+  if(admin){ const inp=document.getElementById('adminPwd'); if(inp)inp.style.display='none';
     const btn=document.querySelector('.rolecard.admin .btn'); if(btn){ btn.textContent='Entrer â†’'; btn.onclick=function(){ ADMIN_PWD='supabase-auth'; enterRole('admin'); }; } }
 }
-function autoEnterByRole(){ const r=CURRENT_ROLE||'tl';
-  if(r==='admin'){ ADMIN_PWD='supabase-auth'; enterRole('admin'); }
-  else if(r==='liv'){ enterRole('liv'); }
-  else if(r==='zone2'){ enterRole('zone2'); }
-  else { enterRole('tl'); }
-}
+function autoEnterByRole(){ if(isAdminUser()){ ADMIN_PWD='supabase-auth'; enterRole('admin'); } /* sinon : rester sur l'accueil, l'utilisateur choisit */ }
 function goHome(){
-  ROLE=null; CURMOD=null; ADMIN_PWD = (CURRENT_ROLE==='admin')?'supabase-auth':'';
+  ROLE=null; CURMOD=null; ADMIN_PWD = isAdminUser()?'supabase-auth':'';
   document.getElementById('home').style.display='block';
   document.getElementById('navbar').style.display='none';
   document.getElementById('modbar').style.display='none';
@@ -1426,10 +1422,7 @@ function changeAdminPwd(){ const oldp=document.getElementById('rgOld').value, np
   if(!oldp||!np){ toast('Remplis les deux champs','err'); return; } if(np.length<4){ toast('Min 4 caractÃ¨res','err'); return; }
   api('setAdminPassword',{password:ADMIN_PWD,old:oldp,new:np}).then(function(){ ADMIN_PWD=np; document.getElementById('rgOld').value=''; document.getElementById('rgNew').value=''; toast('Mot de passe modifiÃ© âœ”','ok'); }).catch(function(e){ toast(e.message,'err'); }); }
 function enterRole(role){
-  if(role==='admin' && CURRENT_ROLE!=='admin'){ toast('AccÃ¨s rÃ©servÃ© Ã  l\'administrateur','err'); return; }
-  if(role==='tl' && !(CURRENT_ROLE==='admin'||CURRENT_ROLE==='tl')){ toast('AccÃ¨s non autorisÃ©','err'); return; }
-  if(role==='liv' && !(CURRENT_ROLE==='admin'||CURRENT_ROLE==='liv')){ toast('AccÃ¨s non autorisÃ©','err'); return; }
-  if(role==='zone2' && !(CURRENT_ROLE==='admin'||CURRENT_ROLE==='zone2')){ toast('AccÃ¨s non autorisÃ©','err'); return; }
+  if(role==='admin' && !isAdminUser()){ toast('AccÃ¨s rÃ©servÃ© Ã  l\'administrateur','err'); return; }
   ROLE=role;
   document.getElementById('home').style.display='none';
   document.getElementById('navbar').style.display='block';
