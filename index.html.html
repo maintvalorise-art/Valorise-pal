@@ -1010,7 +1010,7 @@ tr.alert td{background:var(--danger-soft)}
   </section>
 </main>
 
-<div class="foot">Valorise — outil interne · <b>version 5.7-SUPABASE · 03-01 · BL form combo</b> · <span id="userTag2"></span></div>
+<div class="foot">Valorise — outil interne · <b>version 5.8-SUPABASE · 03-01 · clients from livraisons</b> · <span id="userTag2"></span></div>
 </div><!-- /appWrap -->
 <div class="toast" id="toast"></div>
 
@@ -1995,7 +1995,7 @@ function coType(a){ if(a.TypePalette) return a.TypePalette; const r=String(a.Ref
 function coBuildRefs(){ CO_REFS=S.art.filter(isPF).map(function(a){ return {ref:a.Ref, mesure:coMesFrom(a), type:coType(a)}; })
   .sort(function(a,b){ return String(a.ref)<String(b.ref)?-1:1; }); }
 function coWeek(){ return document.getElementById('coAnnee').value+'-'+document.getElementById('coSemaine').value; }
-function initCommandes(){ coBuildRefs(); document.getElementById('coAnnee').value=S.week.annee; document.getElementById('coSemaine').value=S.week.semaine; loadCommandesSemaine(); }
+function initCommandes(){ coBuildRefs(); loadAllClients(function(){}); document.getElementById('coAnnee').value=S.week.annee; document.getElementById('coSemaine').value=S.week.semaine; loadCommandesSemaine(); }
 function loadCommandesSemaine(){ const an=Number(document.getElementById('coAnnee').value), sem=Number(document.getElementById('coSemaine').value);
   document.getElementById('coMatrix').innerHTML='<div class="loading"><span class="spin"></span> …</div>';
   let pa=an,ps=sem-1; if(ps<1){pa=an-1;ps=52;}
@@ -2003,7 +2003,7 @@ function loadCommandesSemaine(){ const an=Number(document.getElementById('coAnne
     const d=res[0].data, prev=res[1].data;
     CO_DATA=(d&&d.data)||{};
     CO_RETARD=(prev&&prev.reste)||{};
-    const saved=(d&&d.clients)||[]; CO_CLIENTS=Array.from(new Set(saved.concat(S.clients||[]).filter(Boolean)));
+    const saved=(d&&d.clients)||[]; CO_CLIENTS=Array.from(new Set(saved.concat(S.clients||[]).concat(ALL_CLIENTS||[]).filter(Boolean)));
     if(!CO_CLIENTS.length) CO_CLIENTS=['CLIENT 1'];
     renderCommandes();
   }).catch(function(e){ document.getElementById('coMatrix').innerHTML='<div class="warnbox">'+esc(e.message)+'</div>'; });
@@ -2983,8 +2983,14 @@ function makeCombo(input, items){
   list.addEventListener('mousedown',function(e){ const o=e.target.closest('.combo-opt'); if(!o)return; e.preventDefault(); input.value=o.textContent; close(); livRecalc(); });
 }
 function livBuildRefs(){ LIV_REFS=S.art.filter(isPF).map(function(a){ const m=a.Mesure||coMesFrom(a); return a.Ref+(m?(' \u2014 '+m):''); }).sort(); }
+let ALL_CLIENTS=null;
+function loadAllClients(cb){ if(ALL_CLIENTS){ cb(ALL_CLIENTS); return; }
+  api('getLivraisons',{}).then(function(r){ const s={}; (S.clients||[]).forEach(function(c){ if(c)s[c]=1; });
+    (r.rows||[]).forEach(function(b){ if(b.Client)s[b.Client]=1; });
+    ALL_CLIENTS=Object.keys(s).sort(); cb(ALL_CLIENTS);
+  }).catch(function(){ ALL_CLIENTS=(S.clients||[]).slice().sort(); cb(ALL_CLIENTS); }); }
 function initLivraison(){ document.getElementById('livDate').value=S.today; livBuildRefs();
-  makeCombo(document.getElementById('livClient'), (S.clients||[]).slice().sort());
+  loadAllClients(function(list){ makeCombo(document.getElementById('livClient'), list); });
   if(!document.getElementById('livLines').children.length) addLivLine();
   if(!document.getElementById('livNumBl').value){ api('getConfig',{}).then(function(c){ document.getElementById('livNumBl').value=(c&&c.blNext)||260000; }); }
 }
