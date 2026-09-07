@@ -996,7 +996,7 @@ tr.alert td{background:var(--danger-soft)}
   </section>
 </main>
 
-<div class="foot">Valorise — outil interne · <b>version 5.5-SUPABASE · 03-01 · BL A5 + import</b> · <span id="userTag2"></span></div>
+<div class="foot">Valorise — outil interne · <b>version 5.6-SUPABASE · 03-01 · pagination 1000+</b> · <span id="userTag2"></span></div>
 </div><!-- /appWrap -->
 <div class="toast" id="toast"></div>
 
@@ -1033,12 +1033,18 @@ function _collRef(coll){ const filters=[]; const q={
   where:function(f,op,v){ filters.push([f,op,v]); return q; },
   orderBy:function(){ return q; },
   async add(obj){ const id=_sbAutoId(); await _docRef(coll,id).set(obj); return {id:id}; },
-  async get(){ let sel=SB.from('kv').select('id,doc').eq('collection',coll);
-    filters.forEach(function(f){ const c=_sbCol(f[0]), val=String(f[2]);
-      if(f[1]==='==') sel=sel.eq(c,val); else if(f[1]==='>=') sel=sel.gte(c,val); else if(f[1]==='<=') sel=sel.lte(c,val);
-      else if(f[1]==='>') sel=sel.gt(c,val); else if(f[1]==='<') sel=sel.lt(c,val); });
-    const {data,error}=await sel.limit(100000); if(error) throw new Error(error.message);
-    const docs=(data||[]).map(function(r){ return {id:r.id, data:function(){return r.doc;}, ref:_docRef(coll,r.id)}; });
+  async get(){ function build(){ let s=SB.from('kv').select('id,doc').eq('collection',coll);
+      filters.forEach(function(f){ const c=_sbCol(f[0]), val=String(f[2]);
+        if(f[1]==='==') s=s.eq(c,val); else if(f[1]==='>=') s=s.gte(c,val); else if(f[1]==='<=') s=s.lte(c,val);
+        else if(f[1]==='>') s=s.gt(c,val); else if(f[1]==='<') s=s.lt(c,val); });
+      return s; }
+    const PAGE=1000; let from=0; let all=[];
+    while(true){ const {data,error}=await build().order('id',{ascending:true}).range(from,from+PAGE-1);
+      if(error) throw new Error(error.message);
+      all=all.concat(data||[]);
+      if(!data || data.length<PAGE) break;
+      from+=PAGE; if(from>500000) break; }
+    const docs=all.map(function(r){ return {id:r.id, data:function(){return r.doc;}, ref:_docRef(coll,r.id)}; });
     return { docs:docs, empty:docs.length===0, size:docs.length, forEach:function(cb){ docs.forEach(cb); } };
   }
 }; return q; }
@@ -3041,7 +3047,7 @@ async function livWhatsApp(){ const o=livDoc(); if(!o)return; const file=new Fil
 /* ================= REGISTRE BL ================= */
 let REG_ALL=[];
 function initRegistre(){
-  const d=new Date(); const du=(d.getFullYear()-1)+'-01-01';
+  const d=new Date(); const du=(d.getFullYear()-3)+'-01-01';
   document.getElementById('rgvDu').value=du; document.getElementById('rgvAu').value=d.toISOString().slice(0,10);
   api('getLivraisons',{du:document.getElementById('rgvDu').value,au:document.getElementById('rgvAu').value}).then(function(r){ REG_ALL=r.rows||[];
     const cli=Array.from(new Set(REG_ALL.map(function(x){return x.Client;}).filter(Boolean))).sort();
@@ -3124,7 +3130,7 @@ function importLivFile(file){ if(!file) return; toast('Lecture du fichier…','o
   rd.onload=function(e){ try{ const wb=XLSX.read(new Uint8Array(e.target.result),{type:'array',cellDates:true});
     const grp={};
     wb.SheetNames.forEach(function(sn){ parseLivSheet(wb.Sheets[sn]).forEach(function(x){
-      const bl=String(x.idbl||'').trim()||String(x.num||'').replace(/\.0+$/,'').trim(); if(!bl) return;
+      const bl=String(x.num||'').replace(/\.0+$/,'').trim() || String(x.idbl||'').trim(); if(!bl) return;
       const id='IMP-'+bl.replace(/[^\w-]/g,'');
       if(!grp[bl]) grp[bl]={_id:id,BL:(String(x.num||'').replace(/\.0+$/,'')||bl),DocId:id,Date:fmtDate(x.date),Client:String(x.ste||'').trim(),NCmd:String(x.ncmd||'').replace(/\.0+$/,''),lignes:[],total:0,Source:'IMPORT'};
       const q=Number(x.qte||0); grp[bl].lignes.push({ref:String(x.ref||x.mesure||'').trim(),type:String(x.type||'').trim(),mesure:String(x.mesure||'').trim(),traitement:String(x.trait||'').trim(),qte:q}); grp[bl].total+=q;
