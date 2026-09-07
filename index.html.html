@@ -1010,7 +1010,7 @@ tr.alert td{background:var(--danger-soft)}
   </section>
 </main>
 
-<div class="foot">Valorise — outil interne · <b>version 5.9-SUPABASE · 03-01 · fiches robust+diag</b> · <span id="userTag2"></span></div>
+<div class="foot">Valorise — outil interne · <b>version 6.0-SUPABASE · 03-01 · fiche save-on-pdf</b> · <span id="userTag2"></span></div>
 </div><!-- /appWrap -->
 <div class="toast" id="toast"></div>
 
@@ -1646,8 +1646,8 @@ document.getElementById('fChef').addEventListener('change',function(){
 });
 document.getElementById('fType').addEventListener('change',function(){ fillPfList(); fillOpSelects(); });
 
-let LAST_FICHE=null, CURFICHE=null;
-function newFicheId(){ CURFICHE=uid('FP-'); const el=document.getElementById('fNum'); if(el) el.textContent=CURFICHE; }
+let LAST_FICHE=null, CURFICHE=null, FICHE_SAVED_ID=null;
+function newFicheId(){ CURFICHE=uid('FP-'); FICHE_SAVED_ID=null; const el=document.getElementById('fNum'); if(el) el.textContent=CURFICHE; }
 function buildFicheForm(){
   const chef=document.getElementById('fChef').value; const m=metaOfChef(chef);
   const postes=[].map.call(document.querySelectorAll('#fPostes .poste'),function(c){
@@ -1667,18 +1667,29 @@ function buildFicheForm(){
     maint:+document.getElementById('fMnt').value||0, autres:+document.getElementById('fAut').value||0,
     descrMaint:document.getElementById('fDsc').value, commentaire:document.getElementById('fCom').value, total:total };
 }
-async function saveFiche(){
+async function doSaveFiche(){
+  if(FICHE_SAVED_ID && LAST_FICHE && LAST_FICHE.ficheId===FICHE_SAVED_ID) return LAST_FICHE; // déjà enregistrée
   const f=buildFicheForm();
-  if(!f.chef){ toast('Choisis le chef d\'équipe','err'); return; }
+  if(!f.chef){ toast('Choisis le chef d\'équipe','err'); return null; }
   const hasProd=f.postes.some(function(p){return p.prod&&p.ref&&Number(p.qte)>0;});
-  if(!hasProd){ toast('Saisis au moins un poste produit (réf + qté)','err'); return; }
-  try{
-    const d=await api('saveFiche',Object.assign({ficheId:CURFICHE},f));
-    f.ficheId=d.ficheId; f.total=d.total; LAST_FICHE=f;
-    toast('Fiche '+d.ficheId+' enregistrée ✔','ok');
-    newFicheId();
-  }catch(err){ toast(err.message,'err'); }
+  if(!hasProd){ toast('Saisis au moins un poste produit (réf + qté)','err'); return null; }
+  try{ const d=await api('saveFiche',Object.assign({ficheId:CURFICHE},f));
+    f.ficheId=d.ficheId; f.total=d.total; LAST_FICHE=f; FICHE_SAVED_ID=d.ficheId; return f;
+  }catch(err){ toast(err.message,'err'); return null; }
 }
+function resetFicheInputs(){ [].forEach.call(document.querySelectorAll('#fPostes .poste'),function(c){
+    ['.poRef','.poQte','.poObj','.poOp1','.poOp2'].forEach(function(sel){ const el=c.querySelector(sel); if(el)el.value=''; }); });
+  const cs=document.getElementById('fConso'); if(cs) cs.innerHTML='';
+  ['fMMP','fReg','fMnt','fAut','fDsc','fCom'].forEach(function(id){ const el=document.getElementById(id); if(el)el.value=''; });
+  newFicheId(); }
+async function saveFiche(){ const f=await doSaveFiche(); if(f){ toast('Fiche '+f.ficheId+' enregistrée ✔','ok'); resetFicheInputs(); } }
+async function ficheDownloadPdf(){ const f=await doSaveFiche(); if(!f) return; toast('Fiche '+f.ficheId+' enregistrée ✔','ok'); const o=fichePdf(f); if(!o) return;
+  const u=URL.createObjectURL(o.blob); const a=document.createElement('a'); a.href=u; a.download=o.fileName; a.click(); setTimeout(function(){URL.revokeObjectURL(u);},2000); }
+async function ficheWhatsApp(){ const f=await doSaveFiche(); if(!f) return; toast('Fiche '+f.ficheId+' enregistrée ✔','ok'); const o=fichePdf(f); if(!o) return;
+  const file=new File([o.blob],o.fileName,{type:'application/pdf'});
+  if(navigator.canShare && navigator.canShare({files:[file]})){ try{ await navigator.share({files:[file],title:o.fileName,text:'Fiche production '+f.type}); return; }catch(e){} }
+  const u=URL.createObjectURL(o.blob); const a=document.createElement('a'); a.href=u; a.download=o.fileName; a.click();
+  window.open('https://wa.me/?text='+encodeURIComponent('Fiche production '+f.type+' — '+f.ficheId+' — Total: '+f.total),'_blank'); }
 /* PDF + WhatsApp */
 function fichePdf(f){
   const J=window.jspdf; if(!J||!J.jsPDF){ toast('PDF indisponible (besoin d\'internet)','err'); return null; }
@@ -1705,26 +1716,11 @@ function fichePdf(f){
   doc.setDrawColor(200); doc.line(14,y2+5,80,y2+5); doc.setFontSize(8); doc.text('Signature chef d\'équipe',14,y2+10);
   return { blob:doc.output('blob'), fileName:'Fiche_'+f.type+'_'+f.ficheId+'.pdf' };
 }
-function ficheDownloadPdf(){
-  const f=LAST_FICHE||buildFicheForm(); const o=fichePdf(f); if(!o) return;
-  const u=URL.createObjectURL(o.blob); const a=document.createElement('a'); a.href=u; a.download=o.fileName; a.click();
-  setTimeout(function(){URL.revokeObjectURL(u);},2000);
-}
 function ficheExcel(){ const f=LAST_FICHE||buildFicheForm();
   const rows=f.postes.filter(function(p){return p.ref||Number(p.qte)||p.op1;}).map(function(p){ return {Poste:p.poste,Ref:p.ref,Designation:p.designation,Objectif:p.objectif,Realise:p.qte,Operateur1:p.op1,Operateur2:p.op2}; });
   f.consommation.forEach(function(c){ rows.push({Poste:'CONSOMMATION',Ref:c.ref,Realise:c.qte}); });
   if(!rows.length){ toast('Rien à exporter','err'); return; }
   exportExcel(rows,'Fiche','Fiche_'+f.type+'_'+f.ficheId+'.xlsx'); }
-async function ficheWhatsApp(){
-  const f=LAST_FICHE||buildFicheForm(); const o=fichePdf(f); if(!o) return;
-  const file=new File([o.blob],o.fileName,{type:'application/pdf'});
-  if(navigator.canShare && navigator.canShare({files:[file]})){
-    try{ await navigator.share({files:[file],title:o.fileName,text:'Fiche production '+f.type}); return; }catch(e){}
-  }
-  const u=URL.createObjectURL(o.blob); const a=document.createElement('a'); a.href=u; a.download=o.fileName; a.click();
-  const txt=encodeURIComponent('Fiche production '+f.type+' — '+f.ficheId+' — Total: '+f.total);
-  window.open('https://wa.me/?text='+txt,'_blank');
-}
 
 /* ================= ABSENCE ================= */
 document.getElementById('aChef').addEventListener('change', renderAbsList);
