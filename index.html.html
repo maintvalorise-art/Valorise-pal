@@ -154,6 +154,17 @@ tr.alert td{background:var(--danger-soft)}
 .gcmd .coRet{color:var(--muted)}
 .gcmd .coR{font-weight:600}
 .gcmd .coR.late{color:var(--danger)}
+.combo{position:relative}
+.combo>input{width:100%;padding-right:26px}
+.combo-btn{position:absolute;right:2px;top:50%;transform:translateY(-50%);border:0;background:none;cursor:pointer;font-size:14px;color:var(--muted);padding:4px 6px}
+.combo-list{position:absolute;left:0;right:0;top:calc(100% + 2px);background:var(--card);border:1px solid var(--line);border-radius:8px;max-height:220px;overflow:auto;z-index:60;display:none;box-shadow:0 8px 24px rgba(0,0,0,.14)}
+.combo-list.open{display:block}
+.combo-opt{padding:8px 10px;cursor:pointer;font-size:13px}
+.combo-opt:hover{background:var(--green-soft)}
+.combo-empty{padding:8px 10px;color:var(--muted);font-size:12px}
+.line-head.livhead,.line-row.livrow{display:grid;grid-template-columns:1fr 110px 120px 90px 32px;gap:8px;align-items:center}
+.line-head.livhead{font-size:12px;color:var(--muted);font-weight:600;margin-bottom:6px}
+.line-row.livrow{margin-bottom:8px}
 .comtab thead th{vertical-align:bottom}
 .linerow{display:grid;grid-template-columns:1fr 110px 40px;gap:8px;align-items:end;margin-bottom:8px}
 .linerow.wide{grid-template-columns:1fr 100px 90px 1fr 40px}
@@ -642,25 +653,29 @@ tr.alert td{background:var(--danger-soft)}
 
   <!-- ============ BON DE LIVRAISON — NOUVEAU (liv/TL/admin) ============ -->
   <section class="view" data-view="livnew">
-    <div class="vhead"><div class="eyebrow">Livraison</div><h2>Nouveau bon</h2>
-      <p>Sortie de produit fini vers un client — A4 2 copies, Excel ou WhatsApp.</p></div>
+    <div class="vhead"><div class="eyebrow">Livraison</div><h2>Nouveau bon de livraison</h2>
+      <p>Client &amp; référence : choisis dans la liste (▾) ou tape. Impression A5/A4, Excel, WhatsApp.</p></div>
     <div class="card">
       <h3>Informations générales</h3>
       <div class="grid g2">
         <div class="field"><label>Date</label><input type="date" id="livDate"></div>
-        <div class="field"><label>Client (STE)</label><input id="livClient" list="clientList" placeholder="choisir ou taper"></div>
-        <div class="field"><label>N° Bon de livraison (client)</label><input type="number" id="livNumBl">
+        <div class="field"><label>Client</label>
+          <div class="combo"><input type="text" id="livClient" placeholder="Choisir dans la liste ou taper un nom" autocomplete="off"><button type="button" class="combo-btn" tabindex="-1">▾</button><div class="combo-list"></div></div>
+        </div>
+        <div class="field"><label>N° Bon de livraison (client)</label><input type="text" id="livNumBl" placeholder="ex : 260286">
           <span class="mini-link" onclick="livSetStart()">Définir le n° de départ</span> — puis +1 à chaque bon.</div>
         <div class="field"><label>N° Commande</label><input id="livCmd" placeholder="ex : 4500123456"></div>
-        <div class="field"><label>Traitement (défaut)</label><select id="livTrait"><option>TRAITEES</option><option>NON TRAITEES</option></select></div>
         <div class="field"><label>Format d'impression</label><select id="livFormat">
-          <option value="a4">A4 — les 2 copies sur 1 seule page</option>
-          <option value="a5">A5 paysage — 1 copie par page (2 pages)</option></select></div>
+          <option value="a5">A5 paysage — 1 copie par page (2 pages)</option>
+          <option value="a4">A4 — les 2 copies sur 1 seule page</option></select></div>
       </div>
-      <div class="field"><label>Responsable livraison</label><input id="livResp"></div>
-      <h3 style="margin-top:6px">Palettes livrées</h3>
+    </div>
+    <div class="card">
+      <h3>Palettes livrées</h3>
+      <div class="line-head livhead"><span>Référence</span><span>Type</span><span>Traitement</span><span>Quantité</span><span></span></div>
       <div id="livLines"></div>
       <button class="addline" onclick="addLivLine()">+ Ajouter une ligne</button>
+      <div class="total-row" style="margin-top:8px;font-weight:700">Total quantité : <span id="livTotal">0</span></div>
     </div>
     <div class="row-actions" style="gap:10px">
       <button class="btn" style="flex:1;min-width:120px" onclick="saveLivraison()">Valider &amp; PDF</button>
@@ -668,7 +683,6 @@ tr.alert td{background:var(--danger-soft)}
       <button class="btn ghost" onclick="livExcel()">Excel</button>
       <button class="btn pine" onclick="livWhatsApp()">WhatsApp</button>
     </div>
-    <datalist id="livPfList"></datalist>
   </section>
 
   <!-- ============ BON DE LIVRAISON — REGISTRE ============ -->
@@ -996,7 +1010,7 @@ tr.alert td{background:var(--danger-soft)}
   </section>
 </main>
 
-<div class="foot">Valorise — outil interne · <b>version 5.6-SUPABASE · 03-01 · pagination 1000+</b> · <span id="userTag2"></span></div>
+<div class="foot">Valorise — outil interne · <b>version 5.7-SUPABASE · 03-01 · BL form combo</b> · <span id="userTag2"></span></div>
 </div><!-- /appWrap -->
 <div class="toast" id="toast"></div>
 
@@ -2955,34 +2969,46 @@ function dvExcel(){ const lignes=dvGather(); if(!lignes.length){toast('Rien à e
   exportExcel(lignes.map(function(l){return {Produit:l.ref,Designation:l.designation,Cout:l.cout.toFixed(2),Marge:l.marge+'%',PrixVente:l.prixVente.toFixed(2),Qte:l.qte,Total:l.total.toFixed(2)};}),'Devis','Devis_'+(document.getElementById('dvClient').value||'client')+'.xlsx'); }
 
 /* ================= BON DE LIVRAISON ================= */
-let LAST_LIV=null;
-function initLivraison(){ document.getElementById('livDate').value=S.today; fillLivPf();
+let LAST_LIV=null, LIV_REFS=[];
+function makeCombo(input, items){
+  const wrap=input.parentElement; const list=wrap.querySelector('.combo-list'); const btn=wrap.querySelector('.combo-btn');
+  function render(f){ f=String(f||'').toLowerCase().trim(); const arr=f?items.filter(function(v){return v.toLowerCase().indexOf(f)!==-1;}):items;
+    list.innerHTML=arr.length?arr.slice(0,400).map(function(v){return '<div class="combo-opt">'+esc(v)+'</div>';}).join(''):'<div class="combo-empty">Aucun résultat — saisie manuelle possible</div>'; }
+  function open(f){ render(f); list.classList.add('open'); } function close(){ list.classList.remove('open'); }
+  input.addEventListener('focus',function(){ open(''); });
+  input.addEventListener('input',function(){ open(input.value); livRecalc(); });
+  input.addEventListener('blur',function(){ setTimeout(close,180); });
+  input.addEventListener('keydown',function(e){ if(e.key==='Escape') close(); });
+  btn.addEventListener('click',function(){ if(list.classList.contains('open'))close(); else{ input.focus(); open(''); } });
+  list.addEventListener('mousedown',function(e){ const o=e.target.closest('.combo-opt'); if(!o)return; e.preventDefault(); input.value=o.textContent; close(); livRecalc(); });
+}
+function livBuildRefs(){ LIV_REFS=S.art.filter(isPF).map(function(a){ const m=a.Mesure||coMesFrom(a); return a.Ref+(m?(' \u2014 '+m):''); }).sort(); }
+function initLivraison(){ document.getElementById('livDate').value=S.today; livBuildRefs();
+  makeCombo(document.getElementById('livClient'), (S.clients||[]).slice().sort());
   if(!document.getElementById('livLines').children.length) addLivLine();
   if(!document.getElementById('livNumBl').value){ api('getConfig',{}).then(function(c){ document.getElementById('livNumBl').value=(c&&c.blNext)||260000; }); }
 }
 function livSetStart(){ const v=prompt('N° de départ du bon de livraison :',document.getElementById('livNumBl').value||260000); if(v===null)return; const n=Number(v); if(isNaN(n)){toast('Nombre invalide','err');return;}
   api('setBlNext',{password:ADMIN_PWD,blNext:n}).then(function(){ document.getElementById('livNumBl').value=n; toast('N° de départ défini','ok'); }).catch(function(e){toast(e.message,'err');}); }
-function fillLivPf(){ const el=document.getElementById('livPfList'); if(el) el.innerHTML=dlOptions(S.art.filter(isPF)); }
-function livTypeOf(a){ if(!a) return ''; const cover=/cover|couvercle/i.test((a.Designation||'')+' '+(a.Ref||'')); return (cover?'COUVERCLE':'PALLET')+' '+(a.TypePalette||''); }
-function addLivLine(){
-  const div=document.createElement('div'); div.className='linerow wide';
-  div.innerHTML='<div><input class="lvRef" list="livPfList" placeholder="référence" oninput="livAutofill(this)"></div>'
-    +'<div><input class="lvType" placeholder="Type" readonly></div>'
-    +'<div><select class="lvTrait"><option>TRAITEES</option><option>NON TRAITEES</option></select></div>'
-    +'<div><input class="lvMes" placeholder="Mesure"></div>'
-    +'<div><input type="number" class="lvQte" placeholder="Qté" min="0"></div>'
-    +'<button class="xbtn" onclick="this.parentNode.remove()">×</button>';
+function addLivLine(ref,type,trait,qte){
+  const div=document.createElement('div'); div.className='line-row livrow';
+  div.innerHTML='<div class="combo"><input type="text" class="lvRef" placeholder="Référence" autocomplete="off" value="'+esc(ref||'')+'"><button type="button" class="combo-btn" tabindex="-1">▾</button><div class="combo-list"></div></div>'
+    +'<select class="lvType"><option value="">--</option><option '+(type==='NEUF'?'selected':'')+'>NEUF</option><option '+(type==='RECYCLER'?'selected':'')+'>RECYCLER</option></select>'
+    +'<select class="lvTrait"><option value="">--</option><option '+(trait==='Traité'?'selected':'')+'>Traité</option><option '+(trait==='Non traité'?'selected':'')+'>Non traité</option></select>'
+    +'<input type="number" class="lvQte" placeholder="Qté" min="0" value="'+(qte||'')+'" oninput="livRecalc()">'
+    +'<button class="xbtn" onclick="this.parentNode.remove();livRecalc();">×</button>';
   document.getElementById('livLines').appendChild(div);
-  const dt=document.getElementById('livTrait').value; div.querySelector('.lvTrait').value=dt;
+  makeCombo(div.querySelector('.lvRef'), LIV_REFS);
 }
-function livAutofill(inp){ const row=inp.parentNode.parentNode; const a=S.art.find(function(x){return String(x.Ref)===inp.value.trim();});
-  if(a){ if(!row.querySelector('.lvMes').value) row.querySelector('.lvMes').value=a.Mesure||''; row.querySelector('.lvType').value=livTypeOf(a); } }
+function livRecalc(){ let t=0; [].forEach.call(document.querySelectorAll('#livLines .lvQte'),function(q){ const v=parseFloat(q.value); if(!isNaN(v))t+=v; }); const el=document.getElementById('livTotal'); if(el)el.textContent=t; }
+function livSplitRef(full){ const p=String(full||'').split('\u2014'); return {code:(p[0]||'').trim(), mesure:(p[1]||'').trim()}; }
 function livCurrent(){
-  const lignes=[].map.call(document.querySelectorAll('#livLines .linerow'),function(r){ const ref=r.querySelector('.lvRef').value.trim(); const a=S.art.find(function(x){return String(x.Ref)===ref;})||{};
-    return {ref:ref, designation:a.Designation||'', mesure:r.querySelector('.lvMes').value.trim(), type:r.querySelector('.lvType').value||livTypeOf(a), traitement:r.querySelector('.lvTrait').value, qte:r.querySelector('.lvQte').value}; }).filter(function(l){return l.ref&&Number(l.qte)>0;});
+  const lignes=[].map.call(document.querySelectorAll('#livLines .livrow'),function(r){ const sp=livSplitRef(r.querySelector('.lvRef').value);
+    return {ref:sp.code, mesure:sp.mesure, type:r.querySelector('.lvType').value, traitement:r.querySelector('.lvTrait').value, qte:r.querySelector('.lvQte').value}; })
+    .filter(function(l){return l.ref||Number(l.qte)>0;});
   return {date:document.getElementById('livDate').value, client:document.getElementById('livClient').value.trim(), ncmd:document.getElementById('livCmd').value.trim(),
-    numBl:document.getElementById('livNumBl').value.trim(), responsable:document.getElementById('livResp').value.trim(),
-    format:document.getElementById('livFormat').value, lignes:lignes, bon:(LAST_LIV&&LAST_LIV.bon)||document.getElementById('livNumBl').value.trim()};
+    numBl:document.getElementById('livNumBl').value.trim(), responsable:'', format:document.getElementById('livFormat').value, lignes:lignes,
+    bon:(LAST_LIV&&LAST_LIV.bon)||document.getElementById('livNumBl').value.trim()};
 }
 async function saveLivraison(){
   const s=livCurrent(); if(!s.client){toast('Client obligatoire','err');return;} if(!s.lignes.length){toast('Ajoute au moins une ligne','err');return;}
@@ -2990,7 +3016,7 @@ async function saveLivraison(){
     s.bon=d.bon; LAST_LIV=s; toast('Bon '+d.bon+' enregistré ✔','ok');
     const o=livDoc(); if(o){ const u=URL.createObjectURL(o.blob);const x=document.createElement('a');x.href=u;x.download=o.fileName;x.click(); }
     const nxt=Number(s.numBl)+1; if(!isNaN(nxt)) document.getElementById('livNumBl').value=nxt;
-    document.getElementById('livLines').innerHTML=''; addLivLine(); document.getElementById('livCmd').value='';
+    document.getElementById('livLines').innerHTML=''; addLivLine(); document.getElementById('livCmd').value=''; livRecalc();
   }catch(err){ toast(err.message,'err'); }
 }
 function livRefDisplay(ref,mesure){ ref=String(ref||'').trim(); mesure=String(mesure||'').trim(); return mesure?(ref+' \u2014 '+mesure):ref; }
