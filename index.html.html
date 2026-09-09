@@ -1010,7 +1010,7 @@ tr.alert td{background:var(--danger-soft)}
   </section>
 </main>
 
-<div class="foot">Valorise — outil interne · <b>version 6.0-SUPABASE · 03-01 · fiche save-on-pdf</b> · <span id="userTag2"></span></div>
+<div class="foot">Valorise — outil interne · <b>version 6.1-SUPABASE · 03-01 · save-on-any-button</b> · <span id="userTag2"></span></div>
 </div><!-- /appWrap -->
 <div class="toast" id="toast"></div>
 
@@ -1766,16 +1766,16 @@ function absPdfDoc(){
     didParseCell:function(dd){ if(dd.section==='body' && dd.column.index===2 && !/present|présent/i.test(String(dd.cell.raw))) dd.cell.styles.textColor=[178,59,50]; }});
   return {blob:doc.output('blob'),fileName:'Absences_'+a.equipe+'_'+a.date+'.pdf'};
 }
-function absPdf(){ const o=absPdfDoc(); if(!o)return; const u=URL.createObjectURL(o.blob);const x=document.createElement('a');x.href=u;x.download=o.fileName;x.click(); }
-function absExcel(){ const a=absCurrent(); exportExcel(a.lignes.map(function(l){return {Date:a.date,Equipe:a.equipe,Shift:a.shift,ID:l.id,Nom:l.nom,Statut:l.statut};}),'Absences','Absences_'+a.equipe+'_'+a.date+'.xlsx'); }
-async function absWhatsApp(){ const o=absPdfDoc(); if(!o)return; const file=new File([o.blob],o.fileName,{type:'application/pdf'});
+async function absPdf(){ if(!(await doSaveAbsence())) return; const o=absPdfDoc(); if(!o)return; const u=URL.createObjectURL(o.blob);const x=document.createElement('a');x.href=u;x.download=o.fileName;x.click(); }
+async function absExcel(){ if(!(await doSaveAbsence())) return; const a=absCurrent(); exportExcel(a.lignes.map(function(l){return {Date:a.date,Equipe:a.equipe,Shift:a.shift,ID:l.id,Nom:l.nom,Statut:l.statut};}),'Absences','Absences_'+a.equipe+'_'+a.date+'.xlsx'); }
+async function absWhatsApp(){ if(!(await doSaveAbsence())) return; const o=absPdfDoc(); if(!o)return; const file=new File([o.blob],o.fileName,{type:'application/pdf'});
   if(navigator.canShare&&navigator.canShare({files:[file]})){ try{ await navigator.share({files:[file],title:o.fileName}); return; }catch(e){} }
   const u=URL.createObjectURL(o.blob);const x=document.createElement('a');x.href=u;x.download=o.fileName;x.click();
   window.open('https://wa.me/?text='+encodeURIComponent(o.fileName),'_blank'); }
 function absToggleNote(){ const on=document.getElementById('aNoteOn').checked; document.getElementById('aList').classList.toggle('noteon',on); document.getElementById('aNoteHint').classList.toggle('hidden',!on); }
-async function saveAbsence(){
+async function doSaveAbsence(){
   const chef=document.getElementById('aChef').value; const m=metaOfChef(chef);
-  if(!m){ toast('Choisis le chef','err'); return; }
+  if(!m){ toast('Choisis le chef','err'); return false; }
   const noteOn=document.getElementById('aNoteOn') && document.getElementById('aNoteOn').checked;
   const lignes=[].map.call(document.querySelectorAll('#aList .abs-row'),function(row){
     const sel=row.querySelector('.absSel'); const o={id:row.dataset.id,nom:row.dataset.nom,statut:sel.value};
@@ -1783,11 +1783,13 @@ async function saveAbsence(){
       prod:Number(row.querySelector('.n_prod').value||0), qual:Number(row.querySelector('.n_qual').value||0), cons:Number(row.querySelector('.n_cons').value||0),
       sec:Number(row.querySelector('.n_sec').value||0), comp:Number(row.querySelector('.n_comp').value||0), poste:Number(row.querySelector('.n_poste').value||0), pen:Number(row.querySelector('.n_pen').value||0)}; }
     return o; });
-  toast('Enregistrement…');
+  if(!lignes.length){ toast('Aucun opérateur à pointer','err'); return false; }
   try{ await api('saveAbsence',{date:document.getElementById('aDate').value,equipe:m.equipe,chef:m.chef,shift:m.shift,lignes:lignes,withNotes:noteOn});
-    toast('Pointage'+(noteOn?' + notation':'')+' enregistré ✔ ('+lignes.length+')','ok'); }
-  catch(err){ toast(err.message,'err'); }
+    return true; }
+  catch(err){ toast(err.message,'err'); return false; }
 }
+async function saveAbsence(){ const noteOn=document.getElementById('aNoteOn') && document.getElementById('aNoteOn').checked;
+  if(await doSaveAbsence()) toast('Pointage'+(noteOn?' + notation':'')+' enregistré ✔','ok'); }
 
 /* ================= STOCK ================= */
 let STOCK=[];
@@ -3013,14 +3015,21 @@ function livCurrent(){
     numBl:document.getElementById('livNumBl').value.trim(), responsable:'', format:document.getElementById('livFormat').value, lignes:lignes,
     bon:(LAST_LIV&&LAST_LIV.bon)||document.getElementById('livNumBl').value.trim()};
 }
-async function saveLivraison(){
-  const s=livCurrent(); if(!s.client){toast('Client obligatoire','err');return;} if(!s.lignes.length){toast('Ajoute au moins une ligne','err');return;}
+let LIV_SAVED_KEY=null;
+async function doSaveLivraison(){
+  const s=livCurrent(); if(!s.client){toast('Client obligatoire','err');return null;} if(!s.lignes.length){toast('Ajoute au moins une ligne','err');return null;}
+  const key=s.numBl+'|'+s.client;
+  if(LIV_SAVED_KEY===key && LAST_LIV){ return LAST_LIV; }
   try{ const d=await api('saveLivraison',{date:s.date,client:s.client,ncmd:s.ncmd,numBl:s.numBl,responsable:s.responsable,lignes:s.lignes});
-    s.bon=d.bon; LAST_LIV=s; toast('Bon '+d.bon+' enregistré ✔','ok');
-    const o=livDoc(); if(o){ const u=URL.createObjectURL(o.blob);const x=document.createElement('a');x.href=u;x.download=o.fileName;x.click(); }
-    const nxt=Number(s.numBl)+1; if(!isNaN(nxt)) document.getElementById('livNumBl').value=nxt;
-    document.getElementById('livLines').innerHTML=''; addLivLine(); document.getElementById('livCmd').value=''; livRecalc();
-  }catch(err){ toast(err.message,'err'); }
+    s.bon=d.bon; LAST_LIV=s; LIV_SAVED_KEY=key; return s;
+  }catch(err){ toast(err.message,'err'); return null; }
+}
+async function livEnsureSaved(){ const s=livCurrent(); if(s.client && s.lignes.length){ const key=s.numBl+'|'+s.client; if(LIV_SAVED_KEY!==key) return await doSaveLivraison(); } return LAST_LIV; }
+async function saveLivraison(){
+  const s=await doSaveLivraison(); if(!s) return; toast('Bon '+s.bon+' enregistré ✔','ok');
+  const o=livDoc(); if(o){ const u=URL.createObjectURL(o.blob);const x=document.createElement('a');x.href=u;x.download=o.fileName;x.click(); }
+  const nxt=Number(s.numBl)+1; if(!isNaN(nxt)) document.getElementById('livNumBl').value=nxt;
+  document.getElementById('livLines').innerHTML=''; addLivLine(); document.getElementById('livCmd').value=''; livRecalc(); LIV_SAVED_KEY=null;
 }
 function livRefDisplay(ref,mesure){ ref=String(ref||'').trim(); mesure=String(mesure||'').trim(); return mesure?(ref+' \u2014 '+mesure):ref; }
 function livDrawCopy(doc,offsetY,s,label){
@@ -3066,10 +3075,10 @@ function livDoc(){ const s=LAST_LIV||livCurrent(); if(!s.lignes.length){toast('R
     labels.forEach(function(lb,i){ if(i>0)doc.addPage('a5','landscape'); livDrawCopy(doc,0,s,lb); }); }
   else { doc=new J.jsPDF({unit:'mm',format:'a4'}); labels.forEach(function(lb,i){ livDrawCopy(doc,i*148.5,s,lb); }); }
   return {blob:doc.output('blob'),fileName:'BL_'+s.client+'_'+s.bon+'.pdf'}; }
-function livPdf(){ const o=livDoc(); if(!o)return; const u=URL.createObjectURL(o.blob);const x=document.createElement('a');x.href=u;x.download=o.fileName;x.click(); }
-function livExcel(){ const s=LAST_LIV||livCurrent(); if(!s.lignes.length){toast('Rien à exporter','err');return;}
+async function livPdf(){ await livEnsureSaved(); const o=livDoc(); if(!o)return; const u=URL.createObjectURL(o.blob);const x=document.createElement('a');x.href=u;x.download=o.fileName;x.click(); }
+async function livExcel(){ await livEnsureSaved(); const s=LAST_LIV||livCurrent(); if(!s.lignes.length){toast('Rien à exporter','err');return;}
   exportExcel(s.lignes.map(function(l){return {Date:s.date,Ref:l.ref,Type:l.type,Traitement:l.traitement,Mesure:l.mesure,Qte:l.qte,Client:s.client,NCmd:s.ncmd,BL:s.bon};}),'Livraison','BL_'+s.client+'_'+s.bon+'.xlsx'); }
-async function livWhatsApp(){ const o=livDoc(); if(!o)return; const file=new File([o.blob],o.fileName,{type:'application/pdf'});
+async function livWhatsApp(){ await livEnsureSaved(); const o=livDoc(); if(!o)return; const file=new File([o.blob],o.fileName,{type:'application/pdf'});
   if(navigator.canShare&&navigator.canShare({files:[file]})){ try{ await navigator.share({files:[file],title:o.fileName}); return; }catch(e){} }
   const u=URL.createObjectURL(o.blob);const x=document.createElement('a');x.href=u;x.download=o.fileName;x.click(); window.open('https://wa.me/?text='+encodeURIComponent(o.fileName),'_blank'); }
 
