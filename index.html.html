@@ -701,6 +701,7 @@ tr.alert td{background:var(--danger-soft)}
         <button class="btn ghost" onclick="renderRegistre()">Filtrer</button>
         <button class="btn ghost sm" onclick="registreExcel()">Export Excel</button>
         <button class="btn sm" onclick="document.getElementById('regFile').click()">⬆ Importer un fichier</button>
+        <button class="btn ghost sm" onclick="regDedupe()">🧹 Supprimer les doublons</button>
         <button class="btn ghost sm" onclick="regClearAll()">🗑 Effacer toutes les livraisons</button>
         <input type="file" id="regFile" accept=".xlsx,.xls" style="display:none" onchange="importLivFile(this.files[0])">
       </div>
@@ -1010,7 +1011,7 @@ tr.alert td{background:var(--danger-soft)}
   </section>
 </main>
 
-<div class="foot">Valorise — outil interne · <b>version 6.1-SUPABASE · 03-01 · save-on-any-button</b> · <span id="userTag2"></span></div>
+<div class="foot">Valorise — outil interne · <b>version 6.2-SUPABASE · 03-01 · dedupe BL</b> · <span id="userTag2"></span></div>
 </div><!-- /appWrap -->
 <div class="toast" id="toast"></div>
 
@@ -1099,7 +1100,7 @@ async function sbForgot(){ const em=document.getElementById('lgEmail').value.tri
   if(!em){ msg.textContent='Saisis ton email d\'abord'; return; }
   const {error}=await SB.auth.resetPasswordForEmail(em); msg.textContent=error?('Erreur : '+error.message):'Email de réinitialisation envoyé ✔ (vérifie ta boîte)'; }
 async function sbLogout(){ await SB.auth.signOut(); location.reload(); }
-const WRITE=['saveEmploye','deleteEmploye','saveAffectation','savePlanning','saveAbsence','saveArticle','deleteArticle','saveEntree','saveSortie','saveCommande','saveOrdreProd','saveFiche','deleteFiche','savePoste','deletePoste','saveBom','deleteBom','saveQuotation','setAdminPassword','saveLivraison','savePlanLiv','setBlNext','importLivraisons','updateLivraison','deleteLivraison','clearLivraisons','deleteFicheAbsence','saveTraitement','deleteTraitement','saveCommandesSemaine','saveZ2Mouv','deleteZ2Mouv','saveZ2Article','deleteZ2Article','importZ2','clearZ2','saveNoteTL'];
+const WRITE=['saveEmploye','deleteEmploye','saveAffectation','savePlanning','saveAbsence','saveArticle','deleteArticle','saveEntree','saveSortie','saveCommande','saveOrdreProd','saveFiche','deleteFiche','savePoste','deletePoste','saveBom','deleteBom','saveQuotation','setAdminPassword','saveLivraison','savePlanLiv','setBlNext','importLivraisons','updateLivraison','deleteLivraison','clearLivraisons','deleteLivBulk','deleteFicheAbsence','saveTraitement','deleteTraitement','saveCommandesSemaine','saveZ2Mouv','deleteZ2Mouv','saveZ2Article','deleteZ2Article','importZ2','clearZ2','saveNoteTL'];
 
 async function fb_importLivraisons(p){ const docs=p.docs||[];
   for(var i=0;i<docs.length;i+=400){ const batch=db.batch();
@@ -1199,7 +1200,8 @@ async function route(action,p){
     case 'setAdminPassword':{ const s=await db.collection('config').doc('app').get(); const cur=(s.exists&&s.data().adminPassword)||'valorise2026'; if(String(p.old)!==String(cur)) throw new Error('Ancien mot de passe incorrect'); await db.collection('config').doc('app').set({adminPassword:String(p.new)},{merge:true}); return {ok:true}; }
     case 'setBlNextNum':   await db.collection('config').doc('app').set({blNextNum:String(p.num||'')},{merge:true}); return {ok:true};
     case 'saveLivraison':  return await fb_saveLivraison(p);
-    case 'getLivraisons':  { const s=await db.collection('livraisons').get(); return {ok:true, rows:s.docs.map(function(d){return d.data();})}; }
+    case 'getLivraisons':  { const s=await db.collection('livraisons').get(); return {ok:true, rows:s.docs.map(function(d){return Object.assign({_id:d.id}, d.data());})}; }
+    case 'deleteLivBulk':  { const ids=p.ids||[]; for(var i=0;i<ids.length;i+=200){ const b=db.batch(); ids.slice(i,i+200).forEach(function(id){ b.delete(db.collection('livraisons').doc(String(id))); }); await b.commit(); } return {ok:true,n:ids.length}; }
     case 'clearLivraisons': { const s=await db.collection('livraisons').get(); const ds=s.docs; for(var i=0;i<ds.length;i+=200){ const b=db.batch(); ds.slice(i,i+200).forEach(function(d){b.delete(d.ref);}); await b.commit(); } return {ok:true,n:ds.length}; }
     case 'importLivraisons': return await fb_importLivraisons(p);
     case 'updateLivraison':  await db.collection('livraisons').doc(String(p.doc.DocId||p.doc.BL)).set(p.doc); return {ok:true};
@@ -3147,6 +3149,17 @@ function registreExcel(){ const rows=regFiltered(); if(!rows.length){toast('Rien
 function regClearAll(){ if(!confirm('EFFACER TOUTES les livraisons de la base ? Action irréversible.'))return;
   if(!confirm('Confirme une deuxième fois : supprimer TOUT le registre des bons de livraison ?'))return;
   toast('Suppression…'); api('clearLivraisons',{password:ADMIN_PWD}).then(function(r){ REG_ALL=[]; renderRegistre(); toast((r.n||0)+' bons supprimés ✔','ok'); }).catch(function(e){toast(e.message,'err');}); }
+async function regDedupe(){ if(!confirm('Chercher et supprimer les bons de livraison en double ?'))return;
+  toast('Analyse des doublons…');
+  try{ const r=await api('getLivraisons',{}); const rows=r.rows||[]; const seen={}; const del=[];
+    rows.forEach(function(b){ const bl=String(b.BL||'').trim();
+      const key = bl ? ('B:'+bl+'|'+(b.Client||'')) : ('S:'+(b.Client||'')+'|'+isoD(b.Date)+'|'+(b.total||0));
+      if(seen[key]) del.push(b._id||b.DocId); else seen[key]=1; });
+    const ids=del.filter(Boolean);
+    if(!ids.length){ toast('Aucun doublon trouvé ✔','ok'); return; }
+    if(!confirm(ids.length+' doublon(s) trouvé(s). Les supprimer ?')) return;
+    await api('deleteLivBulk',{password:ADMIN_PWD,ids:ids}); toast(ids.length+' doublons supprimés ✔','ok'); initRegistre();
+  }catch(e){ toast(e.message,'err'); } }
 function parseLivSheet(ws){
   const aoa=XLSX.utils.sheet_to_json(ws,{header:1,defval:'',raw:false}); if(!aoa.length) return [];
   let hi=-1;
