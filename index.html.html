@@ -430,13 +430,14 @@ tr.alert td{background:var(--danger-soft)}
 
       <div class="card">
         <h3>Affectation employé → équipe</h3>
-        <div class="warnbox">Bascule d'un coup tout un département vers une équipe, ou change chaque employé.</div>
+        <div class="warnbox">Bascule d'un coup toute une équipe (ou un département) vers une autre équipe, ou change chaque employé.</div>
         <div class="grid g3" style="margin-bottom:10px">
-          <div class="field"><label>Département</label>
+          <div class="field"><label>De l'équipe</label><select id="bkFromEq"><option value="">— (utiliser le département) —</option></select></div>
+          <div class="field"><label>ou Département</label>
             <select id="bkDep"><option>NEUF</option><option>RECYCLER</option><option>RECYCLER 1</option><option>RECYCLER 2</option></select></div>
           <div class="field"><label>Vers l'équipe</label><select id="bkEq"></select></div>
-          <div class="field" style="align-self:end"><button class="btn pine" onclick="bulkAssign()">Basculer le département</button></div>
         </div>
+        <div class="row-actions" style="margin-bottom:10px"><button class="btn pine" onclick="bulkAssign()">Basculer</button></div>
         <div id="afTable"></div>
         <button class="btn" style="margin-top:12px" onclick="saveAffectation()">Enregistrer l'affectation</button>
       </div>
@@ -1011,7 +1012,7 @@ tr.alert td{background:var(--danger-soft)}
   </section>
 </main>
 
-<div class="foot">Valorise — outil interne · <b>version 6.2-SUPABASE · 03-01 · dedupe BL</b> · <span id="userTag2"></span></div>
+<div class="foot">Valorise — outil interne · <b>version 6.3-SUPABASE · 03-01 · bulk equipe</b> · <span id="userTag2"></span></div>
 </div><!-- /appWrap -->
 <div class="toast" id="toast"></div>
 
@@ -1551,6 +1552,7 @@ function initStatic(){
   // équipes
   const eqs=(S.ref.equipes||['A','B','C','D']);
   document.getElementById('bkEq').innerHTML=eqs.map(function(e){return '<option value="'+esc(e)+'">'+esc(eqLabel(e))+'</option>';}).join('');
+  const bf=document.getElementById('bkFromEq'); if(bf) bf.innerHTML='<option value="">— (utiliser le département) —</option>'+eqs.map(function(e){return '<option value="'+esc(e)+'">'+esc(eqLabel(e))+'</option>';}).join('');
   document.getElementById('trEq').innerHTML='<option value="">Toutes</option>'+eqs.map(function(e){return '<option value="'+esc(e)+'">'+esc(eqLabel(e))+'</option>';}).join('');
   // clients datalist
   document.getElementById('clientList').innerHTML=S.clients.map(function(c){return '<option value="'+esc(c)+'">';}).join('');
@@ -1875,10 +1877,14 @@ function renderAfTable(){
     }).join('')+'</tbody></table></div>';
 }
 function bulkAssign(){
+  const fromEq=document.getElementById('bkFromEq').value;
   const dep=document.getElementById('bkDep').value, eq=document.getElementById('bkEq').value;
-  const ids=S.emp.filter(function(e){return e.Departement===dep;}).map(function(e){return String(e.ID);});
-  document.querySelectorAll('#afTable tr[data-id]').forEach(function(tr){ if(ids.indexOf(tr.dataset.id)>=0) tr.querySelector('.afEq').value=eq; });
-  toast(ids.length+' employés (dép. '+dep+') → équipe '+eq,'ok');
+  let ids, label;
+  if(fromEq){ ids=S.emp.filter(function(e){return equipeOf(e.ID)===fromEq;}).map(function(e){return String(e.ID);}); label='équipe '+eqLabel(fromEq); }
+  else { const nd=norm(dep); ids=S.emp.filter(function(e){return norm(e.Departement)===nd;}).map(function(e){return String(e.ID);}); label='dép. '+dep; }
+  if(!ids.length){ toast('Aucun employé trouvé ('+label+')','err'); return; }
+  let n=0; document.querySelectorAll('#afTable tr[data-id]').forEach(function(tr){ if(ids.indexOf(tr.dataset.id)>=0){ const sel=tr.querySelector('.afEq'); if(sel){ if(![].some.call(sel.options,function(o){return o.value===eq;})){ const o=document.createElement('option'); o.value=eq; o.textContent=eqLabel(eq); sel.appendChild(o); } sel.value=eq; n++; } } });
+  toast(n+' employés ('+label+') → '+eqLabel(eq)+' — clique « Enregistrer »','ok');
 }
 function saveAffectation(){
   const affectations=[].map.call(document.querySelectorAll('#afTable tr[data-id]'),function(tr){
