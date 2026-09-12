@@ -144,6 +144,26 @@ tr.alert td{background:var(--danger-soft)}
 .kv b{color:var(--green)}
 .mini-link{color:var(--pine);font-size:12px;cursor:pointer;text-decoration:underline}
 .rolecard.liv{border-top:3px solid #C98A3A}
+.rolecard.presentation{border-top:3px solid #C98A3A}
+.pres-hero{background:linear-gradient(135deg,#0d2c1f,#164a34);color:#eaf3ee;padding:48px 20px;text-align:center;border-radius:16px}
+.pres-hero-in{max-width:760px;margin:0 auto}
+.pres-logo{font-size:22px;font-weight:800;letter-spacing:3px;color:#f0c274}.pres-logo span{color:#fff}
+.pres-hero h1{font-size:30px;margin:14px 0 8px}
+.pres-sub{color:#bfe0ce;font-size:15px;line-height:1.6}
+.pres-cta{margin-top:18px;color:#f0c274;font-size:13px}
+.pres-3d{margin-top:22px;text-align:center}
+.pres-3d h2{font-size:20px;color:var(--green)}
+#palletHolder{max-width:820px;margin:10px auto;background:radial-gradient(circle at 50% 40%,#f7f4ee,#e7ebe6);border:1px solid var(--line);border-radius:16px;overflow:hidden}
+#palletCanvas{width:100%;height:420px;display:block;cursor:grab}
+.pres-3d-ctrl{display:flex;gap:14px;align-items:center;justify-content:center;flex-wrap:wrap;margin-top:8px}
+.pres-parts{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:10px}
+.pres-parts .pp{font-size:12px;padding:4px 10px;border-radius:20px;color:#fff}
+.pp.deck{background:#b5793e}.pp.bearer{background:#8a5a2b}.pp.block{background:#5d3a1a}.pp.bottom{background:#a06a34}
+.pres-feat{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px;margin-top:26px}
+.pres-feat .pf{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px;text-align:center}
+.pres-feat .pf-ic{font-size:30px}.pres-feat .pf h3{margin:8px 0 4px;color:var(--green)}
+.pres-feat .pf p{font-size:13px;color:var(--muted)}
+.pres-foot{margin:28px 0 10px;text-align:center;color:var(--muted);font-size:12px}
 .comtab th,.comtab td{padding:4px 5px;text-align:center}
 .comtab .colref{font-weight:700;font-size:12px}
 .comtab .colmes{font-size:10px;color:var(--muted);font-weight:400}
@@ -208,6 +228,7 @@ tr.alert td{background:var(--danger-soft)}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 </head>
 <body>
 <div id="bar" class="topbar"></div>
@@ -273,6 +294,48 @@ tr.alert td{background:var(--danger-soft)}
         <p>Déchets : réception, livraison, stock &amp; pont bascule.</p>
         <span class="go">Entrer →</span>
       </div>
+      <div class="rolecard presentation" onclick="openPresentation()" role="button" tabindex="0" onkeydown="if(event.key==='Enter')openPresentation()">
+        <div class="ic">🏭</div>
+        <h3>Présentation</h3>
+        <p>Vitrine de l'entreprise &amp; vue éclatée 3D de la palette.</p>
+        <span class="go">Entrer →</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ PRÉSENTATION (admin) ============ -->
+  <section class="view" data-view="presentation">
+    <div id="presWrap">
+      <div class="pres-hero">
+        <div class="pres-hero-in">
+          <div class="pres-logo">VALORISE <span>MAROC</span></div>
+          <h1>La palette, réinventée — neuve &amp; recyclée</h1>
+          <p class="pres-sub">Fabricant de palettes bois neuves et recyclées, traitement thermique certifié <b>ISPM 15 / NIMP 15</b>, au cœur de la Zone Franche de Tanger.</p>
+          <div class="pres-cta"><span>▼ Fais glisser pour explorer la palette en 3D</span></div>
+        </div>
+      </div>
+      <div class="pres-3d">
+        <h2>Palette 1200 × 1000 mm — vue éclatée interactive</h2>
+        <div id="palletHolder"><canvas id="palletCanvas"></canvas></div>
+        <div class="pres-3d-ctrl">
+          <label>Éclatement <input type="range" id="explodeRange" min="0" max="100" value="0" oninput="palletExplode(this.value)"></label>
+          <button class="btn ghost sm" onclick="palletToggleSpin()">⟳ Rotation auto</button>
+          <span class="muted" style="font-size:12px">Glisse pour tourner · molette pour zoomer</span>
+        </div>
+        <div class="pres-parts">
+          <span class="pp deck">Planches de dessus (5)</span>
+          <span class="pp bearer">Traverses (3)</span>
+          <span class="pp block">Dés / blocs (9)</span>
+          <span class="pp bottom">Planches de dessous (3)</span>
+        </div>
+      </div>
+      <div class="pres-feat">
+        <div class="pf"><div class="pf-ic">🌲</div><h3>Neuves</h3><p>Palettes bois neuves sur mesure, aux dimensions et charges de vos lignes.</p></div>
+        <div class="pf"><div class="pf-ic">♻️</div><h3>Recyclées</h3><p>Reconditionnement et réparation : une solution économique et durable.</p></div>
+        <div class="pf"><div class="pf-ic">🔥</div><h3>Traitement ISPM 15</h3><p>Traitement thermique certifié pour l'export international (NIMP 15).</p></div>
+        <div class="pf"><div class="pf-ic">🚚</div><h3>Livraison Zone Franche</h3><p>Service aux industriels de Tanger Free Zone, Automotive City &amp; Kenitra.</p></div>
+      </div>
+      <div class="pres-foot">VALORISE MAROC · Zone Franche d'Exportation, Tanger · Producteur ISPM 15 n° MA-3483 · Groupe Fueltec Search</div>
     </div>
   </section>
 
@@ -1012,7 +1075,7 @@ tr.alert td{background:var(--danger-soft)}
   </section>
 </main>
 
-<div class="foot">Valorise — outil interne · <b>version 6.3-SUPABASE · 03-01 · bulk equipe</b> · <span id="userTag2"></span></div>
+<div class="foot">Valorise — outil interne · <b>version 6.4-SUPABASE · 03-01 · presentation 3D</b> · <span id="userTag2"></span></div>
 </div><!-- /appWrap -->
 <div class="toast" id="toast"></div>
 
@@ -1426,12 +1489,67 @@ function applyRoleUI(){
   const admin=isAdminUser();
   document.querySelectorAll('.portal .rolecard').forEach(function(c){
     if(c.classList.contains('admin')) c.style.display = admin ? '' : 'none';
+    else if(c.classList.contains('presentation')) c.style.display = admin ? '' : 'none';
     else c.style.display = '';
   });
   if(admin){ const inp=document.getElementById('adminPwd'); if(inp)inp.style.display='none';
     const btn=document.querySelector('.rolecard.admin .btn'); if(btn){ btn.textContent='Entrer →'; btn.onclick=function(){ ADMIN_PWD='supabase-auth'; enterRole('admin'); }; } }
 }
-function autoEnterByRole(){ if(isAdminUser()){ ADMIN_PWD='supabase-auth'; enterRole('admin'); } /* sinon : rester sur l'accueil, l'utilisateur choisit */ }
+function autoEnterByRole(){ if(isAdminUser()){ ADMIN_PWD='supabase-auth'; enterRole('admin'); } /* sinon : rester sur l'accueil */ }
+
+/* ================= PRÉSENTATION + PALETTE 3D ================= */
+function openPresentation(){ if(!isAdminUser()){ toast('Réservé à l\'administrateur','err'); return; }
+  document.getElementById('home').style.display='none';
+  document.getElementById('navbar').style.display='none';
+  document.getElementById('modbar').style.display='none';
+  document.getElementById('backBtn').style.display='inline-block';
+  document.getElementById('roleLabel').textContent='Présentation';
+  document.querySelectorAll('.view').forEach(function(v){ v.classList.toggle('active', v.dataset.view==='presentation'); });
+  window.scrollTo(0,0); setTimeout(initPallet3D,60);
+}
+let P3D={inited:false,spin:true,explode:0,rotY:0.6,rotX:-0.5,drag:false,px:0,py:0};
+function palletExplode(v){ P3D.explode=Number(v)/100; }
+function palletToggleSpin(){ P3D.spin=!P3D.spin; }
+function initPallet3D(){ if(!window.THREE){ document.getElementById('palletHolder').innerHTML='<div class="warnbox">3D indisponible (Three.js non chargé)</div>'; return; }
+  if(P3D.inited){ P3D.onResize&&P3D.onResize(); return; } P3D.inited=true;
+  const canvas=document.getElementById('palletCanvas'); const holder=document.getElementById('palletHolder');
+  const renderer=new THREE.WebGLRenderer({canvas:canvas,antialias:true,alpha:true}); renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+  const scene=new THREE.Scene();
+  const camera=new THREE.PerspectiveCamera(38,1,0.1,200); let camDist=26;
+  scene.add(new THREE.AmbientLight(0xffffff,0.75));
+  const d1=new THREE.DirectionalLight(0xffffff,0.8); d1.position.set(10,20,12); scene.add(d1);
+  const d2=new THREE.DirectionalLight(0xffffff,0.35); d2.position.set(-12,8,-10); scene.add(d2);
+  const woodTop=new THREE.MeshStandardMaterial({color:0xc98a4e,roughness:0.75});
+  const woodBear=new THREE.MeshStandardMaterial({color:0x8a5a2b,roughness:0.8});
+  const woodBlock=new THREE.MeshStandardMaterial({color:0x6b431f,roughness:0.85});
+  const woodBot=new THREE.MeshStandardMaterial({color:0xb07636,roughness:0.8});
+  const group=new THREE.Group(); scene.add(group);
+  const L=12, W=10; // 1200 x 1000 (1u=100mm)
+  const parts=[]; // {mesh, dir:THREE.Vector3, dist}
+  function board(w,h,d,mat,x,y,z,dir,expl){ const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mat); m.position.set(x,y,z); group.add(m); parts.push({mesh:m,base:new THREE.Vector3(x,y,z),dir:dir,expl:expl}); return m; }
+  // Dessous : 3 planches (le long de X)
+  [-W/2+0.9, 0, W/2-0.9].forEach(function(z){ board(L,0.35,1.8,woodBot, 0,-2.1,z, new THREE.Vector3(0,-1,0), 5); });
+  // 9 blocs (3x3)
+  [-L/2+1, 0, L/2-1].forEach(function(x){ [-W/2+1,0,W/2-1].forEach(function(z){ board(1.6,3.2,1.6,woodBlock, x,0,z, new THREE.Vector3(0,0,0), 0); }); });
+  // 3 traverses (le long de Z) au-dessus des blocs
+  [-L/2+1, 0, L/2-1].forEach(function(x){ board(1.6,0.35,W,woodBear, x,1.85,0, new THREE.Vector3(0,1,0), 2.6); });
+  // Dessus : 5 planches (le long de X)
+  for(let i=0;i<5;i++){ const z=-W/2+1 + i*((W-2)/4); board(L,0.35,1.5,woodTop, 0,2.25,z, new THREE.Vector3(0,1,0), 6); }
+  function onResize(){ const w=holder.clientWidth||800, h=420; renderer.setSize(w,h,false); camera.aspect=w/h; camera.updateProjectionMatrix(); }
+  P3D.onResize=onResize; onResize(); window.addEventListener('resize',onResize);
+  // interactions
+  canvas.addEventListener('pointerdown',function(e){ P3D.drag=true; P3D.spin=false; P3D.px=e.clientX; P3D.py=e.clientY; canvas.style.cursor='grabbing'; });
+  window.addEventListener('pointerup',function(){ P3D.drag=false; canvas.style.cursor='grab'; });
+  window.addEventListener('pointermove',function(e){ if(!P3D.drag)return; P3D.rotY+=(e.clientX-P3D.px)*0.01; P3D.rotX+=(e.clientY-P3D.py)*0.01; P3D.rotX=Math.max(-1.3,Math.min(1.3,P3D.rotX)); P3D.px=e.clientX; P3D.py=e.clientY; });
+  canvas.addEventListener('wheel',function(e){ e.preventDefault(); camDist=Math.max(14,Math.min(46,camDist+ (e.deltaY>0?1.5:-1.5))); },{passive:false});
+  (function loop(){ requestAnimationFrame(loop);
+    if(P3D.spin) P3D.rotY+=0.004;
+    group.rotation.y=P3D.rotY; group.rotation.x=P3D.rotX;
+    parts.forEach(function(p){ p.mesh.position.copy(p.base).add(p.dir.clone().multiplyScalar(p.expl*P3D.explode)); });
+    camera.position.set(0,6,camDist); camera.lookAt(0,0,0);
+    renderer.render(scene,camera);
+  })();
+}
 function goHome(){
   ROLE=null; CURMOD=null; ADMIN_PWD = isAdminUser()?'supabase-auth':'';
   document.getElementById('home').style.display='block';
