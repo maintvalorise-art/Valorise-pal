@@ -826,6 +826,23 @@ tr.alert td{background:var(--danger-soft)}
     <div class="card"><h3>Historique traitements</h3><div id="thrHist"></div></div>
   </section>
 
+  <!-- ============ ÉTAT TRAITEMENT (admin) ============ -->
+  <section class="view" data-view="etattrait">
+    <div class="vhead"><div class="eyebrow">Traitement</div><h2>État des traitements</h2>
+      <p>Totaux par période : nombre de cycles, durée, gasoil — et détail par équipe.</p></div>
+    <div class="admin-body" data-admin="etattrait">
+      <div class="card">
+        <div class="grid g3" style="margin-bottom:10px">
+          <div class="field"><label>Du</label><input type="date" id="etDu"></div>
+          <div class="field"><label>Au</label><input type="date" id="etAu"></div>
+          <div class="field"><label>Équipe</label><select id="etEq"><option value="">Toutes</option></select></div>
+        </div>
+        <div class="row-actions"><button class="btn ghost" onclick="loadEtatTrait()">Afficher</button><button class="btn ghost sm" onclick="etExcel()">Excel</button><button class="btn ghost sm" onclick="etPdf()">PDF</button></div>
+      </div>
+      <div id="etBody"></div>
+    </div>
+  </section>
+
   <!-- ============ ZONE 2 (déchets) ============ -->
   <section class="view" data-view="z2imp">
     <div class="vhead"><div class="eyebrow">Zone 2</div><h2>Import tickets (pont bascule)</h2>
@@ -1095,7 +1112,7 @@ tr.alert td{background:var(--danger-soft)}
   </section>
 </main>
 
-<div class="foot">Valorise — outil interne · <b>version 6.8-SUPABASE · 03-01 · fix design + type + pdf</b> · <span id="userTag2"></span></div>
+<div class="foot">Valorise — outil interne · <b>version 6.9-SUPABASE · 03-01 · module + etat traitement</b> · <span id="userTag2"></span></div>
 </div><!-- /appWrap -->
 <div class="toast" id="toast"></div>
 
@@ -1501,6 +1518,7 @@ const MODULES = {
   prod:  {label:'Gestion Prod',     tabs:[['commandes','Commandes'],['ordre','Ordre de Prod'],['bom','BOM'],['devis','Devis'],['recapprod','Recap Prod'],['etatprod','État Prod'],['histo','Historique'],['kpi','KPI']]},
   rh:    {label:'Gestion RH',       tabs:[['employes','Employés'],['affect','Affectation'],['postes','Postes'],['matrice','Matrice'],['recap','Recap abs.'],['abshisto','Fiches absence'],['notation','Notation'],['transport','Transport']]},
   stock: {label:'Gestion de Stock', tabs:[['stock','Stock'],['entree','Entrée stock'],['sortie','Sortie stock'],['livnew','Bon Livraison'],['livreg','Registre BL'],['etatbl','État BL'],['planliv','Planning Livraison'],['articles','Articles']]},
+  trt:   {label:'Traitement',        tabs:[['trait','Fiche traitement'],['etattrait','État Traitement']]},
   config:{label:'Config',           tabs:[['import','Import Excel'],['reglages','Réglages']]}
 };
 let ROLE=null, CURMOD=null;
@@ -1649,6 +1667,7 @@ function onEnter(v){
   if(v==='histo') initHisto();
   if(v==='etatprod') initEtatProd();
   if(v==='etatbl') initEtatBl();
+  if(v==='etattrait') initEtatTrait();
   if(v==='kpi') initKpi();
   if(v==='postes') renderPostesBase();
   if(v==='matrice') initMatrice();
@@ -2641,6 +2660,49 @@ async function thrBuildBlob(r){ const built=thrDataText(r); const doc=built.doc;
 function thrDownload(r){ r=r||THR_LAST||thrCurrent(); thrBuildBlob(r).then(function(blob){ const u=URL.createObjectURL(blob); const x=document.createElement('a'); x.href=u; x.download='Traitement_'+(r.Equipe||'')+'_'+r.Date+'.pdf'; x.click(); }); }
 function thrPdf(){ thrDownload(); }
 function loadThrHist(){ api('getTraitements',{}).then(function(r){ THR_ALL=(r.rows||[]).sort(function(a,b){return (a.Date+a.HeureDebut)<(b.Date+b.HeureDebut)?1:-1;}); renderThrHist(); }).catch(function(e){ document.getElementById('thrHist').innerHTML='<div class="warnbox">'+esc(e.message)+'</div>'; }); }
+
+/* ================= ÉTAT TRAITEMENT ================= */
+let ET_ALL=[], ET_LAST={rows:[],nb:0,minTot:0,gaz:0};
+function durMin(deb,fin){ if(!deb||!fin)return 0; const a=String(deb).split(':').map(Number),b=String(fin).split(':').map(Number); let d=(b[0]*60+b[1])-(a[0]*60+a[1]); if(d<0)d+=1440; return d; }
+function minLabel(m){ m=Math.round(m); return Math.floor(m/60)+'h'+String(m%60).padStart(2,'0'); }
+function initEtatTrait(){ const d=new Date(); document.getElementById('etDu').value=(d.getFullYear())+'-01-01'; document.getElementById('etAu').value=d.toISOString().slice(0,10); loadEtatTrait(); }
+function loadEtatTrait(){ document.getElementById('etBody').innerHTML='<div class="loading"><span class="spin"></span> …</div>';
+  api('getTraitements',{}).then(function(r){ ET_ALL=r.rows||[];
+    const eqs=Array.from(new Set(ET_ALL.map(function(x){return x.Equipe;}).filter(Boolean))).sort();
+    const sel=document.getElementById('etEq'); const cur=sel.value; sel.innerHTML='<option value="">Toutes</option>'+eqs.map(function(e){return '<option value="'+esc(e)+'">'+esc(eqLabel(e))+'</option>';}).join(''); sel.value=cur;
+    renderEtatTrait();
+  }).catch(function(e){ document.getElementById('etBody').innerHTML='<div class="warnbox">'+esc(e.message)+'</div>'; }); }
+function renderEtatTrait(){ const du=document.getElementById('etDu').value, au=document.getElementById('etAu').value, fEq=document.getElementById('etEq').value;
+  const rows=ET_ALL.filter(function(t){ const d=isoD(t.Date); if(du&&d<du)return false; if(au&&d>au)return false; if(fEq&&t.Equipe!==fEq)return false; return true; });
+  let minTot=0, gaz=0; const byEq={};
+  rows.forEach(function(t){ const m=Number(durMin(t.HeureDebut,t.HeureFin)); const g=Number(t.Gasoil||0); minTot+=m; gaz+=g;
+    const e=t.Equipe||'—'; if(!byEq[e])byEq[e]={eq:e,nb:0,min:0,gaz:0,chefs:{}}; byEq[e].nb++; byEq[e].min+=m; byEq[e].gaz+=g; if(t.Chef)byEq[e].chefs[t.Chef]=1; });
+  const eqRows=Object.keys(byEq).map(function(k){ const o=byEq[k]; return {Equipe:o.eq,Chefs:Object.keys(o.chefs).join(', '),Nb:o.nb,Duree:o.min,Gasoil:o.gaz}; }).sort(function(a,b){return b.Nb-a.Nb;});
+  ET_LAST={rows:eqRows,nb:rows.length,minTot:minTot,gaz:gaz,detail:rows};
+  let h='<div class="card" style="background:var(--green-soft)"><div class="kpis">'
+    +'<div class="kpi"><div class="kv">'+rows.length+'</div><div class="kl">Traitements</div></div>'
+    +'<div class="kpi"><div class="kv">'+minLabel(minTot)+'</div><div class="kl">Durée totale</div></div>'
+    +'<div class="kpi"><div class="kv">'+Math.round(gaz).toLocaleString('fr')+' L</div><div class="kl">Gasoil total</div></div>'
+    +'<div class="kpi"><div class="kv">'+(rows.length?minLabel(minTot/rows.length):'—')+'</div><div class="kl">Durée moy.</div></div></div></div>';
+  h+='<div class="card"><h3>Par équipe</h3><div class="tbl-wrap"><table><thead><tr><th>Équipe</th><th>Chef(s)</th><th>Nb traitements</th><th>Durée totale</th><th>Gasoil (L)</th></tr></thead><tbody>'
+    +(eqRows.length?eqRows.map(function(x){return '<tr><td><b>'+esc(eqLabel(x.Equipe))+'</b></td><td>'+esc(x.Chefs)+'</td><td>'+x.Nb+'</td><td>'+minLabel(x.Duree)+'</td><td>'+Math.round(x.Gasoil).toLocaleString('fr')+'</td></tr>';}).join(''):'<tr><td colspan="5" class="empty">Aucun traitement sur cette période.</td></tr>')+'</tbody></table></div></div>';
+  h+='<div class="card"><h3>Détail des cycles</h3><div class="tbl-wrap"><table><thead><tr><th>Date</th><th>Équipe</th><th>Chef</th><th>Début</th><th>Fin</th><th>Durée</th><th>Gasoil</th><th>Lot</th><th>Type</th></tr></thead><tbody>'
+    +rows.map(function(t){return '<tr><td>'+esc(isoD(t.Date))+'</td><td>'+esc(eqLabel(t.Equipe))+'</td><td>'+esc(t.Chef||'')+'</td><td>'+esc(t.HeureDebut||'')+'</td><td>'+esc(t.HeureFin||'')+'</td><td>'+minLabel(durMin(t.HeureDebut,t.HeureFin))+'</td><td>'+esc(t.Gasoil||'')+'</td><td>'+esc(t.Lot||'')+'</td><td>'+esc(t.Type||'')+'</td></tr>';}).join('')+'</tbody></table></div></div>';
+  document.getElementById('etBody').innerHTML=h;
+}
+function etExcel(){ if(!ET_LAST.detail||!ET_LAST.detail.length){toast('Rien à exporter','err');return;}
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(ET_LAST.rows.map(function(x){return {Equipe:eqLabel(x.Equipe),Chefs:x.Chefs,'Nb traitements':x.Nb,'Durée (min)':x.Duree,'Durée':minLabel(x.Duree),'Gasoil (L)':x.Gasoil};})), 'Par équipe');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(ET_LAST.detail.map(function(t){return {Date:isoD(t.Date),Equipe:eqLabel(t.Equipe),Chef:t.Chef||'',Debut:t.HeureDebut||'',Fin:t.HeureFin||'','Duree':minLabel(durMin(t.HeureDebut,t.HeureFin)),Gasoil:t.Gasoil||'',Lot:t.Lot||'',Type:t.Type||''};})), 'Détail');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet([{Traitements:ET_LAST.nb,'Durée totale':minLabel(ET_LAST.minTot),'Gasoil total (L)':Math.round(ET_LAST.gaz)}]), 'Totaux');
+  XLSX.writeFile(wb,'Etat_traitements.xlsx'); }
+function etPdf(){ if(!ET_LAST.detail||!ET_LAST.detail.length){toast('Rien à exporter','err');return;} const J=window.jspdf; if(!J||!J.jsPDF){toast('PDF indisponible','err');return;}
+  const doc=new J.jsPDF({unit:'mm',format:'a4'}); doc.setFillColor(22,74,52);doc.rect(0,0,210,18,'F');doc.setTextColor(255);doc.setFont(undefined,'bold');doc.setFontSize(14);doc.text('VALORISE — État des traitements',14,12);
+  doc.setTextColor(25);doc.setFont(undefined,'normal');doc.setFontSize(10);
+  doc.text('Période : '+document.getElementById('etDu').value+' → '+document.getElementById('etAu').value,14,26);
+  doc.text('Traitements : '+ET_LAST.nb+'    Durée totale : '+minLabel(ET_LAST.minTot)+'    Gasoil total : '+Math.round(ET_LAST.gaz)+' L',14,32);
+  doc.autoTable({startY:37,head:[['Équipe','Chef(s)','Nb','Durée','Gasoil (L)']],body:ET_LAST.rows.map(function(x){return [eqLabel(x.Equipe),x.Chefs,x.Nb,minLabel(x.Duree),Math.round(x.Gasoil)];}),styles:{fontSize:9},headStyles:{fillColor:[46,125,85]}});
+  doc.save('Etat_traitements.pdf'); }
 function renderThrHist(){ document.getElementById('thrHist').innerHTML= THR_ALL.length? '<div class="tbl-wrap"><table><thead><tr><th>Date</th><th>Équipe</th><th>Début</th><th>Fin</th><th>Durée</th><th>Fichier</th><th></th></tr></thead><tbody>'
     +THR_ALL.map(function(r){ return '<tr><td>'+esc(r.Date)+'</td><td>'+esc(eqLabel(r.Equipe))+'</td><td>'+esc(r.HeureDebut||'')+'</td><td>'+esc(r.HeureFin||'')+'</td><td>'+esc(r.Duree||thrDuree(r.HeureDebut,r.HeureFin))+'</td>'
       +'<td>'+(r.fileData?'<button class="btn link" onclick="thrDownFile(\''+esc(r.TID)+'\')">'+esc(r.fileName||'fichier')+'</button>':'—')+'</td>'
