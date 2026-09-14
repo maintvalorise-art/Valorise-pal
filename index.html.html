@@ -785,15 +785,20 @@ tr.alert td{background:var(--danger-soft)}
           <div class="field"><label>Du</label><input type="date" id="ebDu"></div>
           <div class="field"><label>Au</label><input type="date" id="ebAu"></div>
           <div class="field"><label>Client</label><select id="ebClient"><option value="">Tous</option></select></div>
-          <div class="field"><label>Type</label><select id="ebType"><option value="">Tous</option><option>NEUF</option><option>RECYCLER</option><option>COUVERCLE</option></select></div>
+          <div class="field"><label>Type</label><select id="ebType"><option value="">Tous</option><option>NEUF</option><option>RECYCLER</option><option>AUTRE</option></select></div>
           <div class="field"><label>Traitement</label><select id="ebTrait"><option value="">Tous</option><option>TRAITEES</option><option>NON TRAITEES</option></select></div>
         </div>
-        <div class="row-actions"><button class="btn ghost" onclick="loadEtatBl()">Afficher</button><button class="btn ghost sm" onclick="ebExcel()">Excel</button></div>
+        <div class="row-actions"><button class="btn ghost" onclick="loadEtatBl()">Afficher</button><button class="btn ghost sm" onclick="ebExcel()">Excel</button><button class="btn ghost sm" onclick="ebPdf()">PDF</button></div>
       </div>
       <div id="ebBody"></div>
     </div>
   </section>
 
+  <!-- ============ TRAITEMENT (liv) ============ -->
+  <section class="view" data-view="trait">
+    <div class="vhead"><div class="eyebrow">Traitement &amp; Shipping</div><h2>Fiche de traitement</h2>
+      <p>Traitement thermique : équipe, horaires, opérateurs et graphe (PDF/image).</p></div>
+    <div class="card">
       <div class="grid g2">
         <div class="field"><label>Date</label><input type="date" id="thrDate"></div>
         <div class="field"><label>Équipe</label><select id="thrEq" onchange="thrRenderOps()"></select></div>
@@ -1090,7 +1095,7 @@ tr.alert td{background:var(--danger-soft)}
   </section>
 </main>
 
-<div class="foot">Valorise — outil interne · <b>version 6.7-SUPABASE · 03-01 · etat BL</b> · <span id="userTag2"></span></div>
+<div class="foot">Valorise — outil interne · <b>version 6.8-SUPABASE · 03-01 · fix design + type + pdf</b> · <span id="userTag2"></span></div>
 </div><!-- /appWrap -->
 <div class="toast" id="toast"></div>
 
@@ -3237,8 +3242,8 @@ async function livWhatsApp(){ await livEnsureSaved(); const o=livDoc(); if(!o)re
 /* ================= ÉTAT DES LIVRAISONS ================= */
 let EB_ALL=[], EB_LAST={cli:[],typ:[],tot:0};
 function ebType(l){ const s=((l.type||'')+' '+(l.ref||'')+' '+(l.mesure||'')).toLowerCase();
-  if(/couvercle|cover/i.test(s)) return 'COUVERCLE'; if(/recycl/i.test(s)) return 'RECYCLER'; if(/neuf|new/i.test(s)) return 'NEUF';
-  const r=String(l.ref||''); if(/-03-/.test(r))return 'RECYCLER'; if(/-01-/.test(r))return 'NEUF'; if(/-0?2-/.test(r))return 'COUVERCLE'; return (l.type||'AUTRE').toUpperCase(); }
+  if(/recycl/.test(s)) return 'RECYCLER'; if(/neuf|new/.test(s)) return 'NEUF';
+  const r=String(l.ref||''); if(/-03-/.test(r))return 'RECYCLER'; if(/-01-/.test(r))return 'NEUF'; return 'AUTRE'; }
 function initEtatBl(){ const d=new Date(); document.getElementById('ebDu').value=(d.getFullYear()-3)+'-01-01'; document.getElementById('ebAu').value=d.toISOString().slice(0,10); loadEtatBl(); }
 function loadEtatBl(){ document.getElementById('ebBody').innerHTML='<div class="loading"><span class="spin"></span> …</div>';
   api('getLivraisons',{}).then(function(r){ EB_ALL=r.rows||[];
@@ -3272,6 +3277,13 @@ function ebExcel(){ if(!EB_LAST.cli.length){toast('Rien à exporter','err');retu
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(EB_LAST.typ.map(function(x){return {Type:x.Type,'Total livré':x.Qte};})), 'Par type');
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet([{'Total général':EB_LAST.tot}]), 'Total');
   XLSX.writeFile(wb,'Etat_livraisons.xlsx'); }
+function ebPdf(){ if(!EB_LAST.cli.length){toast('Rien à exporter','err');return;} const J=window.jspdf; if(!J||!J.jsPDF){toast('PDF indisponible','err');return;}
+  const doc=new J.jsPDF({unit:'mm',format:'a4'}); doc.setFillColor(22,74,52);doc.rect(0,0,210,18,'F');doc.setTextColor(255);doc.setFont(undefined,'bold');doc.setFontSize(14);doc.text('VALORISE — État des livraisons',14,12);
+  doc.setTextColor(25);doc.setFont(undefined,'normal');doc.setFontSize(10);
+  doc.text('Période : '+document.getElementById('ebDu').value+' → '+document.getElementById('ebAu').value+'    Total livré : '+EB_LAST.tot,14,26);
+  doc.autoTable({startY:31,head:[['Type de palette','Total livré','%']],body:EB_LAST.typ.map(function(x){return [x.Type,x.Qte,(EB_LAST.tot?Math.round(x.Qte/EB_LAST.tot*100):0)+'%'];}),styles:{fontSize:9},headStyles:{fillColor:[46,125,85]}});
+  doc.autoTable({startY:doc.lastAutoTable.finalY+6,head:[['Client','Nb bons','Total livré','%']],body:EB_LAST.cli.map(function(x){return [x.Client,x.Bons,x.Qte,(EB_LAST.tot?Math.round(x.Qte/EB_LAST.tot*100):0)+'%'];}),styles:{fontSize:8},headStyles:{fillColor:[46,125,85]}});
+  doc.save('Etat_livraisons.pdf'); }
 
 /* ================= REGISTRE BL ================= */
 let REG_ALL=[];
