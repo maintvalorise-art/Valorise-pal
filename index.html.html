@@ -775,11 +775,25 @@ tr.alert td{background:var(--danger-soft)}
     </div>
   </section>
 
-  <!-- ============ TRAITEMENT (liv) ============ -->
-  <section class="view" data-view="trait">
-    <div class="vhead"><div class="eyebrow">Traitement &amp; Shipping</div><h2>Fiche de traitement</h2>
-      <p>Traitement thermique : équipe, horaires, opérateurs et graphe (PDF/image).</p></div>
-    <div class="card">
+  <!-- ============ ÉTAT BL (admin) ============ -->
+  <section class="view" data-view="etatbl">
+    <div class="vhead"><div class="eyebrow">Livraison</div><h2>État des livraisons</h2>
+      <p>Totaux livrés par client, par type de palette et total général.</p></div>
+    <div class="admin-body" data-admin="etatbl">
+      <div class="card">
+        <div class="grid g3" style="margin-bottom:10px">
+          <div class="field"><label>Du</label><input type="date" id="ebDu"></div>
+          <div class="field"><label>Au</label><input type="date" id="ebAu"></div>
+          <div class="field"><label>Client</label><select id="ebClient"><option value="">Tous</option></select></div>
+          <div class="field"><label>Type</label><select id="ebType"><option value="">Tous</option><option>NEUF</option><option>RECYCLER</option><option>COUVERCLE</option></select></div>
+          <div class="field"><label>Traitement</label><select id="ebTrait"><option value="">Tous</option><option>TRAITEES</option><option>NON TRAITEES</option></select></div>
+        </div>
+        <div class="row-actions"><button class="btn ghost" onclick="loadEtatBl()">Afficher</button><button class="btn ghost sm" onclick="ebExcel()">Excel</button></div>
+      </div>
+      <div id="ebBody"></div>
+    </div>
+  </section>
+
       <div class="grid g2">
         <div class="field"><label>Date</label><input type="date" id="thrDate"></div>
         <div class="field"><label>Équipe</label><select id="thrEq" onchange="thrRenderOps()"></select></div>
@@ -1076,7 +1090,7 @@ tr.alert td{background:var(--danger-soft)}
   </section>
 </main>
 
-<div class="foot">Valorise — outil interne · <b>version 6.6-SUPABASE · 03-01 · fix dates import BL</b> · <span id="userTag2"></span></div>
+<div class="foot">Valorise — outil interne · <b>version 6.7-SUPABASE · 03-01 · etat BL</b> · <span id="userTag2"></span></div>
 </div><!-- /appWrap -->
 <div class="toast" id="toast"></div>
 
@@ -1481,7 +1495,7 @@ const VIEWS = {
 const MODULES = {
   prod:  {label:'Gestion Prod',     tabs:[['commandes','Commandes'],['ordre','Ordre de Prod'],['bom','BOM'],['devis','Devis'],['recapprod','Recap Prod'],['etatprod','État Prod'],['histo','Historique'],['kpi','KPI']]},
   rh:    {label:'Gestion RH',       tabs:[['employes','Employés'],['affect','Affectation'],['postes','Postes'],['matrice','Matrice'],['recap','Recap abs.'],['abshisto','Fiches absence'],['notation','Notation'],['transport','Transport']]},
-  stock: {label:'Gestion de Stock', tabs:[['stock','Stock'],['entree','Entrée stock'],['sortie','Sortie stock'],['livnew','Bon Livraison'],['livreg','Registre BL'],['planliv','Planning Livraison'],['articles','Articles']]},
+  stock: {label:'Gestion de Stock', tabs:[['stock','Stock'],['entree','Entrée stock'],['sortie','Sortie stock'],['livnew','Bon Livraison'],['livreg','Registre BL'],['etatbl','État BL'],['planliv','Planning Livraison'],['articles','Articles']]},
   config:{label:'Config',           tabs:[['import','Import Excel'],['reglages','Réglages']]}
 };
 let ROLE=null, CURMOD=null;
@@ -1629,6 +1643,7 @@ function onEnter(v){
   if(v==='reglages') loadReglages();
   if(v==='histo') initHisto();
   if(v==='etatprod') initEtatProd();
+  if(v==='etatbl') initEtatBl();
   if(v==='kpi') initKpi();
   if(v==='postes') renderPostesBase();
   if(v==='matrice') initMatrice();
@@ -3218,6 +3233,45 @@ async function livExcel(){ await livEnsureSaved(); const s=LAST_LIV||livCurrent(
 async function livWhatsApp(){ await livEnsureSaved(); const o=livDoc(); if(!o)return; const file=new File([o.blob],o.fileName,{type:'application/pdf'});
   if(navigator.canShare&&navigator.canShare({files:[file]})){ try{ await navigator.share({files:[file],title:o.fileName}); return; }catch(e){} }
   const u=URL.createObjectURL(o.blob);const x=document.createElement('a');x.href=u;x.download=o.fileName;x.click(); window.open('https://wa.me/?text='+encodeURIComponent(o.fileName),'_blank'); }
+
+/* ================= ÉTAT DES LIVRAISONS ================= */
+let EB_ALL=[], EB_LAST={cli:[],typ:[],tot:0};
+function ebType(l){ const s=((l.type||'')+' '+(l.ref||'')+' '+(l.mesure||'')).toLowerCase();
+  if(/couvercle|cover/i.test(s)) return 'COUVERCLE'; if(/recycl/i.test(s)) return 'RECYCLER'; if(/neuf|new/i.test(s)) return 'NEUF';
+  const r=String(l.ref||''); if(/-03-/.test(r))return 'RECYCLER'; if(/-01-/.test(r))return 'NEUF'; if(/-0?2-/.test(r))return 'COUVERCLE'; return (l.type||'AUTRE').toUpperCase(); }
+function initEtatBl(){ const d=new Date(); document.getElementById('ebDu').value=(d.getFullYear()-3)+'-01-01'; document.getElementById('ebAu').value=d.toISOString().slice(0,10); loadEtatBl(); }
+function loadEtatBl(){ document.getElementById('ebBody').innerHTML='<div class="loading"><span class="spin"></span> …</div>';
+  api('getLivraisons',{}).then(function(r){ EB_ALL=r.rows||[];
+    const cli=Array.from(new Set(EB_ALL.map(function(x){return x.Client;}).filter(Boolean))).sort();
+    const sel=document.getElementById('ebClient'); const cur=sel.value; sel.innerHTML='<option value="">Tous</option>'+cli.map(function(c){return '<option>'+esc(c)+'</option>';}).join(''); sel.value=cur;
+    renderEtatBl();
+  }).catch(function(e){ document.getElementById('ebBody').innerHTML='<div class="warnbox">'+esc(e.message)+'</div>'; }); }
+function renderEtatBl(){ const du=document.getElementById('ebDu').value, au=document.getElementById('ebAu').value,
+    fCli=document.getElementById('ebClient').value, fType=document.getElementById('ebType').value, fTr=norm(document.getElementById('ebTrait').value);
+  const byClient={}, byType={}, bonsByClient={}; let tot=0;
+  EB_ALL.forEach(function(b){ const d=isoD(b.Date); if(du&&d<du)return; if(au&&d>au)return; if(fCli&&b.Client!==fCli)return;
+    let bonHasLine=false;
+    (b.lignes||[]).forEach(function(l){ const t=ebType(l); if(fType&&t!==fType)return; if(fTr&&norm(l.traitement).indexOf(fTr.slice(0,6))<0)return;
+      const q=Number(l.qte||0); if(!q)return; bonHasLine=true;
+      byClient[b.Client]=(byClient[b.Client]||0)+q; byType[t]=(byType[t]||0)+q; tot+=q; });
+    if(bonHasLine) bonsByClient[b.Client]=(bonsByClient[b.Client]||0)+1;
+  });
+  const cliRows=Object.keys(byClient).map(function(c){return {Client:c,Bons:bonsByClient[c]||0,Qte:byClient[c]};}).sort(function(a,b){return b.Qte-a.Qte;});
+  const typRows=Object.keys(byType).map(function(t){return {Type:t,Qte:byType[t]};}).sort(function(a,b){return b.Qte-a.Qte;});
+  EB_LAST={cli:cliRows,typ:typRows,tot:tot};
+  let h='<div class="card" style="background:var(--green-soft)"><div style="font-size:22px;font-weight:800;color:var(--green)">Total livré : '+tot.toLocaleString('fr')+'</div><div class="muted">'+cliRows.length+' client(s) · '+du+' → '+au+'</div></div>';
+  h+='<div class="card"><h3>Par type de palette</h3><div class="tbl-wrap"><table><thead><tr><th>Type</th><th>Total livré</th><th>%</th></tr></thead><tbody>'
+    +(typRows.length?typRows.map(function(x){return '<tr><td><b>'+esc(x.Type)+'</b></td><td>'+x.Qte.toLocaleString('fr')+'</td><td>'+(tot?Math.round(x.Qte/tot*100):0)+'%</td></tr>';}).join(''):'<tr><td colspan="3" class="empty">—</td></tr>')+'</tbody></table></div></div>';
+  h+='<div class="card"><h3>Par client</h3><div class="tbl-wrap"><table><thead><tr><th>Client</th><th>Nb bons</th><th>Total livré</th><th>%</th></tr></thead><tbody>'
+    +(cliRows.length?cliRows.map(function(x){return '<tr><td>'+esc(x.Client)+'</td><td>'+x.Bons+'</td><td><b>'+x.Qte.toLocaleString('fr')+'</b></td><td>'+(tot?Math.round(x.Qte/tot*100):0)+'%</td></tr>';}).join(''):'<tr><td colspan="4" class="empty">Aucune livraison sur ces filtres.</td></tr>')+'</tbody></table></div></div>';
+  document.getElementById('ebBody').innerHTML=h;
+}
+function ebExcel(){ if(!EB_LAST.cli.length){toast('Rien à exporter','err');return;}
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(EB_LAST.cli.map(function(x){return {Client:x.Client,'Nb bons':x.Bons,'Total livré':x.Qte};})), 'Par client');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(EB_LAST.typ.map(function(x){return {Type:x.Type,'Total livré':x.Qte};})), 'Par type');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet([{'Total général':EB_LAST.tot}]), 'Total');
+  XLSX.writeFile(wb,'Etat_livraisons.xlsx'); }
 
 /* ================= REGISTRE BL ================= */
 let REG_ALL=[];
