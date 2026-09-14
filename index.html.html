@@ -961,6 +961,8 @@ tr.alert td{background:var(--danger-soft)}
         <button class="btn" style="width:100%;margin-top:10px" onclick="scSave()">Enregistrer</button>
       </div>
       <div class="card"><h3>Vue d'ensemble — tous les clients</h3><div id="scOv"></div></div>
+      <div class="card"><h3>Ordre de production — semaine suivante</h3><p class="muted" style="margin-top:0">Reste à produire (backlog) par référence, tous clients.</p><div id="scProd"></div>
+        <button class="btn ghost sm" style="margin-top:8px" onclick="scProdExcel()">Excel ordre</button></div>
     </div>
   </section>
 
@@ -1135,7 +1137,7 @@ tr.alert td{background:var(--danger-soft)}
   </section>
 </main>
 
-<div class="foot">Valorise — outil interne · <b>version 7.1-SUPABASE · 03-01 · suivi cmd + fix affect</b> · <span id="userTag2"></span></div>
+<div class="foot">Valorise — outil interne · <b>version 7.2-SUPABASE · 03-01 · suivi cmd complet</b> · <span id="userTag2"></span></div>
 </div><!-- /appWrap -->
 <div class="toast" id="toast"></div>
 
@@ -1538,7 +1540,7 @@ const VIEWS = {
   zone2:[['z2imp','Import tickets'],['z2recep','Réception'],['z2liv','Livraison'],['z2stock','Stock'],['z2art','Articles'],['absence','Absence']]
 };
 const MODULES = {
-  prod:  {label:'Gestion Prod',     tabs:[['commandes','Commandes'],['suivicmd','Suivi Cmd'],['ordre','Ordre de Prod'],['bom','BOM'],['devis','Devis'],['recapprod','Recap Prod'],['etatprod','État Prod'],['histo','Historique'],['kpi','KPI']]},
+  prod:  {label:'Gestion Prod',     tabs:[['suivicmd','Suivi Cmd'],['ordre','Ordre de Prod'],['bom','BOM'],['devis','Devis'],['recapprod','Recap Prod'],['etatprod','État Prod'],['histo','Historique'],['kpi','KPI']]},
   rh:    {label:'Gestion RH',       tabs:[['employes','Employés'],['affect','Affectation'],['postes','Postes'],['matrice','Matrice'],['recap','Recap abs.'],['abshisto','Fiches absence'],['notation','Notation'],['transport','Transport']]},
   stock: {label:'Gestion de Stock', tabs:[['stock','Stock'],['entree','Entrée stock'],['sortie','Sortie stock'],['livnew','Bon Livraison'],['livreg','Registre BL'],['etatbl','État BL'],['planliv','Planning Livraison'],['articles','Articles']]},
   trt:   {label:'Traitement',        tabs:[['trait','Fiche traitement'],['etattrait','État Traitement']]},
@@ -2232,12 +2234,24 @@ function scFillLivrer(){ const cl=document.getElementById('scClient').value; if(
     Object.keys(acc).forEach(function(ref){ (SC_DATA[ref]=SC_DATA[ref]||{}); SC_DATA[ref][cl]=Object.assign({q:0},SC_DATA[ref][cl],{l:acc[ref]}); });
     scRenderClient(); toast('Livré rempli depuis les BL ✔','ok');
   }).catch(function(e){toast(e.message,'err');}); }
-function scOvRows(){ scGather(); const by={}; Object.keys(SC_DATA).forEach(function(ref){ Object.keys(SC_DATA[ref]).forEach(function(c){ const g=SC_DATA[ref][c]; if(!by[c])by[c]={Client:c,cmd:0,liv:0,reste:0}; by[c].cmd+=Number(g.q||0); by[c].liv+=Number(g.l||0); by[c].reste+=scRet(ref,c)+Number(g.q||0)-Number(g.l||0); }); });
+function scOvRows(){ scGather(); const by={}; Object.keys(SC_DATA).forEach(function(ref){ Object.keys(SC_DATA[ref]).forEach(function(c){ const g=SC_DATA[ref][c]; if(!by[c])by[c]={Client:c,ret:0,cmd:0,liv:0,reste:0}; by[c].ret+=scRet(ref,c); by[c].cmd+=Number(g.q||0); by[c].liv+=Number(g.l||0); by[c].reste+=scRet(ref,c)+Number(g.q||0)-Number(g.l||0); }); });
+  // inclure aussi les retards de clients sans commande cette semaine
+  Object.keys(SC_RETARD).forEach(function(ref){ Object.keys(SC_RETARD[ref]).forEach(function(c){ if(!by[c]){ by[c]={Client:c,ret:0,cmd:0,liv:0,reste:0}; by[c].ret+=scRet(ref,c); by[c].reste+=scRet(ref,c); } }); });
   return Object.keys(by).map(function(k){return by[k];}).sort(function(a,b){return b.reste-a.reste;}); }
 function scOverview(){ const rows=scOvRows();
-  document.getElementById('scOv').innerHTML= rows.length? '<div class="tbl-wrap"><table><thead><tr><th>Client</th><th>Commandé</th><th>Livré</th><th>Reste</th></tr></thead><tbody>'
-    +rows.map(function(x){return '<tr><td>'+esc(x.Client)+'</td><td>'+x.cmd+'</td><td>'+x.liv+'</td><td'+(x.reste>0?' style="color:var(--danger);font-weight:700"':'')+'>'+x.reste+'</td></tr>';}).join('')
-    +'</tbody></table></div>' : '<div class="empty">Aucune commande cette semaine.</div>'; }
+  document.getElementById('scOv').innerHTML= rows.length? '<div class="tbl-wrap"><table><thead><tr><th>Client</th><th>Retard (S-1)</th><th>Commandé</th><th>Livré</th><th>Reste</th></tr></thead><tbody>'
+    +rows.map(function(x){return '<tr><td>'+esc(x.Client)+'</td><td>'+(x.ret||'')+'</td><td>'+x.cmd+'</td><td>'+x.liv+'</td><td'+(x.reste>0?' style="color:var(--danger);font-weight:700"':'')+'>'+x.reste+'</td></tr>';}).join('')
+    +'</tbody></table></div>' : '<div class="empty">Aucune commande cette semaine.</div>'; scProd(); }
+function scProdData(){ scGather(); const need={}; CO_REFS.forEach(function(r){ let s=0; Object.keys(SC_DATA[r.ref]||{}).forEach(function(c){ const g=SC_DATA[r.ref][c]; const reste=scRet(r.ref,c)+Number(g.q||0)-Number(g.l||0); if(reste>0)s+=reste; });
+    // retards purs (clients sans commande)
+    Object.keys(SC_RETARD[r.ref]||{}).forEach(function(c){ if(!(SC_DATA[r.ref]&&SC_DATA[r.ref][c])){ const v=scRet(r.ref,c); if(v>0)s+=v; } });
+    if(s>0)need[r.ref]={ref:r.ref,mesure:r.mesure,type:r.type,qte:s}; });
+  return Object.keys(need).map(function(k){return need[k];}); }
+function scProd(){ const rows=scProdData();
+  document.getElementById('scProd').innerHTML= rows.length? '<div class="tbl-wrap"><table><thead><tr><th>Réf</th><th>Mesure</th><th>Type</th><th>À produire</th></tr></thead><tbody>'
+    +rows.map(function(x){return '<tr><td><b>'+esc(x.ref)+'</b></td><td>'+esc(x.mesure)+'</td><td>'+esc(x.type)+'</td><td><b>'+x.qte+'</b></td></tr>';}).join('')+'</tbody></table></div>'
+    : '<div class="empty">Aucun reste à produire (tout livré).</div>'; }
+function scProdExcel(){ const rows=scProdData(); if(!rows.length){toast('Rien à produire','err');return;} exportExcel(rows.map(function(x){return {Ref:x.ref,Mesure:x.mesure,Type:x.type,AProduire:x.qte};}),'OrdreProd','Ordre_prod.xlsx'); }
 function scExcel(){ const cl=document.getElementById('scClient').value; scGather();
   const wb=XLSX.utils.book_new();
   if(cl){ const rows=CO_REFS.map(function(r){ const g=scGet(r.ref,cl); const ret=scRet(r.ref,cl); return {Ref:r.ref,Mesure:r.mesure,Retard:ret,Commande:g.q||0,Livre:g.l||0,Reste:ret+Number(g.q||0)-Number(g.l||0)};}).filter(function(x){return x.Commande||x.Livre||x.Retard;});
