@@ -940,7 +940,30 @@ tr.alert td{background:var(--danger-soft)}
     <datalist id="clientList"></datalist>
   </section>
 
-  <!-- ============ ORDRE DE PRODUCTION (admin) ============ -->
+  <!-- ============ SUIVI COMMANDES (simple, 1 client) ============ -->
+  <section class="view" data-view="suivicmd">
+    <div class="vhead"><div class="eyebrow">Client</div><h2>Suivi commandes — par client</h2>
+      <p>Choisis un client : commandé / livré / reste par type. Vue simple + vue d'ensemble.</p></div>
+    <div class="admin-body" data-admin="suivicmd">
+      <div class="card">
+        <div class="grid g3" style="margin-bottom:10px">
+          <div class="field"><label>Année</label><input type="number" id="scAnnee"></div>
+          <div class="field"><label>Semaine</label><input type="number" id="scSemaine"></div>
+          <div class="field"><label>Client</label><select id="scClient" onchange="scRenderClient()"><option value="">— choisir —</option></select></div>
+        </div>
+        <div class="row-actions" style="margin-bottom:10px">
+          <button class="btn ghost sm" onclick="scLoad()">Charger</button>
+          <button class="btn ghost sm" onclick="scFillLivrer()">Remplir « Livré » depuis les BL</button>
+          <button class="btn ghost sm" onclick="scExcel()">Excel</button>
+          <button class="btn ghost sm" onclick="scPdf()">PDF</button>
+        </div>
+        <div id="scBody"><div class="empty">Choisis un client.</div></div>
+        <button class="btn" style="width:100%;margin-top:10px" onclick="scSave()">Enregistrer</button>
+      </div>
+      <div class="card"><h3>Vue d'ensemble — tous les clients</h3><div id="scOv"></div></div>
+    </div>
+  </section>
+
   <section class="view" data-view="ordre">
     <div class="vhead"><div class="eyebrow">Planification</div><h2>Ordre de production</h2>
       <p>Les commandes de la semaine, réparties par jour puis par shift.</p></div>
@@ -1112,7 +1135,7 @@ tr.alert td{background:var(--danger-soft)}
   </section>
 </main>
 
-<div class="foot">Valorise — outil interne · <b>version 7.0-SUPABASE · 03-01 · semaine dimanche</b> · <span id="userTag2"></span></div>
+<div class="foot">Valorise — outil interne · <b>version 7.1-SUPABASE · 03-01 · suivi cmd + fix affect</b> · <span id="userTag2"></span></div>
 </div><!-- /appWrap -->
 <div class="toast" id="toast"></div>
 
@@ -1329,13 +1352,13 @@ async function fb_bootstrap(p){
 }
 async function fb_saveAffectation(p){
   const emp=await fbAll('employes'); const byId={}; (p.affectations||[]).forEach(function(a){byId[String(a.EmployeID)]=a;});
-  const batch=db.batch();
-  emp.forEach(function(e){ const a=byId[String(e.ID)]; if(!a) return; const upd={};
-    if(a.Equipe!==undefined) upd.Equipe=a.Equipe;
-    if(a.PosteID!==undefined) upd.PosteID=a.PosteID;
-    if(a.Departement) upd.Departement=a.Departement;
-    if(Object.keys(upd).length) batch.update(db.collection('employes').doc(String(e.ID)),upd); });
-  await batch.commit(); return {ok:true,n:(p.affectations||[]).length};
+  const batch=db.batch(); let n=0;
+  emp.forEach(function(e){ const a=byId[String(e.ID)]; if(!a) return; const doc=Object.assign({},e); delete doc._id;
+    if(a.Equipe!==undefined) doc.Equipe=a.Equipe;
+    if(a.PosteID!==undefined) doc.PosteID=a.PosteID;
+    if(a.Departement) doc.Departement=a.Departement;
+    batch.set(db.collection('employes').doc(String(e.ID)),doc); n++; });
+  await batch.commit(); return {ok:true,n:n};
 }
 async function fb_savePlanning(p){
   const q=await db.collection('planning').where('Annee','==',Number(p.annee)).where('Semaine','==',Number(p.semaine)).get();
@@ -1515,7 +1538,7 @@ const VIEWS = {
   zone2:[['z2imp','Import tickets'],['z2recep','Réception'],['z2liv','Livraison'],['z2stock','Stock'],['z2art','Articles'],['absence','Absence']]
 };
 const MODULES = {
-  prod:  {label:'Gestion Prod',     tabs:[['commandes','Commandes'],['ordre','Ordre de Prod'],['bom','BOM'],['devis','Devis'],['recapprod','Recap Prod'],['etatprod','État Prod'],['histo','Historique'],['kpi','KPI']]},
+  prod:  {label:'Gestion Prod',     tabs:[['commandes','Commandes'],['suivicmd','Suivi Cmd'],['ordre','Ordre de Prod'],['bom','BOM'],['devis','Devis'],['recapprod','Recap Prod'],['etatprod','État Prod'],['histo','Historique'],['kpi','KPI']]},
   rh:    {label:'Gestion RH',       tabs:[['employes','Employés'],['affect','Affectation'],['postes','Postes'],['matrice','Matrice'],['recap','Recap abs.'],['abshisto','Fiches absence'],['notation','Notation'],['transport','Transport']]},
   stock: {label:'Gestion de Stock', tabs:[['stock','Stock'],['entree','Entrée stock'],['sortie','Sortie stock'],['livnew','Bon Livraison'],['livreg','Registre BL'],['etatbl','État BL'],['planliv','Planning Livraison'],['articles','Articles']]},
   trt:   {label:'Traitement',        tabs:[['trait','Fiche traitement'],['etattrait','État Traitement']]},
@@ -1658,6 +1681,7 @@ function onEnter(v){
   if(v==='articles') renderArticles();
   if(v==='affect') renderAffect();
   if(v==='commandes') initCommandes();
+  if(v==='suivicmd') initSuivi();
   if(v==='entree') { if(!document.getElementById('inLines').children.length) addEntreeLine(); }
   if(v==='sortie') { fillSoList(); if(!document.getElementById('soLines').children.length) addSortieLine(); }
   if(v==='livnew') initLivraison();
@@ -2162,6 +2186,71 @@ function saveEntree(){
       document.getElementById('inLines').innerHTML=''; addEntreeLine();
     }).catch(function(err){toast(err.message,'err');});
 }
+
+/* ================= SUIVI COMMANDES (simple, 1 client) ================= */
+let SC_DATA={}, SC_RETARD={}, SC_CLIENTS=[];
+function initSuivi(){ coBuildRefs(); document.getElementById('scAnnee').value=S.week.annee; document.getElementById('scSemaine').value=S.week.semaine; loadAllClients(function(){}); scLoad(); }
+function scWeek(){ return document.getElementById('scAnnee').value+'-'+document.getElementById('scSemaine').value; }
+function scLoad(){ const an=Number(document.getElementById('scAnnee').value), sem=Number(document.getElementById('scSemaine').value); let pa=an,ps=sem-1; if(ps<1){pa=an-1;ps=52;}
+  document.getElementById('scBody').innerHTML='<div class="loading"><span class="spin"></span> …</div>';
+  Promise.all([api('getCommandesSemaine',{week:an+'-'+sem}),api('getCommandesSemaine',{week:pa+'-'+ps})]).then(function(res){
+    const d=res[0].data, prev=res[1].data; SC_DATA=(d&&d.data)||{}; SC_RETARD=(prev&&prev.reste)||{};
+    const saved=(d&&d.clients)||[]; SC_CLIENTS=Array.from(new Set(saved.concat(ALL_CLIENTS||[]).concat(S.clients||[]).filter(Boolean))).sort();
+    const sel=document.getElementById('scClient'); const cur=sel.value; sel.innerHTML='<option value="">— choisir —</option>'+SC_CLIENTS.map(function(c){return '<option>'+esc(c)+'</option>';}).join(''); sel.value=cur;
+    scRenderClient(); scOverview();
+  }).catch(function(e){ document.getElementById('scBody').innerHTML='<div class="warnbox">'+esc(e.message)+'</div>'; });
+}
+function scGet(ref,cl){ return (SC_DATA[ref]&&SC_DATA[ref][cl])||{q:0,l:0}; }
+function scRet(ref,cl){ return Number((SC_RETARD[ref]&&SC_RETARD[ref][cl])||0); }
+function scRenderClient(){ const cl=document.getElementById('scClient').value;
+  if(!cl){ document.getElementById('scBody').innerHTML='<div class="empty">Choisis un client.</div>'; return; }
+  let h='<div class="tbl-wrap"><table><thead><tr><th>Réf</th><th>Mesure</th><th>Retard</th><th>Commandé</th><th>Livré</th><th>Reste</th></tr></thead><tbody>';
+  CO_REFS.forEach(function(r){ const g=scGet(r.ref,cl); const ret=scRet(r.ref,cl); const reste=ret+Number(g.q||0)-Number(g.l||0);
+    h+='<tr data-ref="'+esc(r.ref)+'"><td><b>'+esc(r.ref)+'</b></td><td>'+esc(r.mesure)+'</td>'
+      +'<td class="scRet">'+(ret||'')+'</td>'
+      +'<td><input type="number" class="scQ" min="0" value="'+(g.q||'')+'" oninput="scRecalc(this)" style="width:70px"></td>'
+      +'<td><input type="number" class="scL" min="0" value="'+(g.l||'')+'" oninput="scRecalc(this)" style="width:70px"></td>'
+      +'<td class="scR'+(reste>0?' late':'')+'">'+reste+'</td></tr>'; });
+  h+='</tbody></table></div>';
+  document.getElementById('scBody').innerHTML=h;
+}
+function scRecalc(el){ const tr=el.closest('tr'); const ref=tr.dataset.ref; const cl=document.getElementById('scClient').value;
+  const q=Number(tr.querySelector('.scQ').value||0), l=Number(tr.querySelector('.scL').value||0); const reste=scRet(ref,cl)+q-l;
+  const c=tr.querySelector('.scR'); c.textContent=reste; c.className='scR'+(reste>0?' late':''); }
+function scGather(){ const cl=document.getElementById('scClient').value; if(!cl)return;
+  [].forEach.call(document.querySelectorAll('#scBody tr[data-ref]'),function(tr){ const ref=tr.dataset.ref; const q=Number(tr.querySelector('.scQ').value||0), l=Number(tr.querySelector('.scL').value||0);
+    if(q||l){ (SC_DATA[ref]=SC_DATA[ref]||{})[cl]={q:q,l:l}; } else if(SC_DATA[ref]) delete SC_DATA[ref][cl]; }); }
+function scSave(){ const cl=document.getElementById('scClient').value; if(!cl){toast('Choisis un client','err');return;} scGather();
+  const reste={}; Object.keys(SC_DATA).forEach(function(ref){ Object.keys(SC_DATA[ref]).forEach(function(c){ const g=SC_DATA[ref][c]; const v=scRet(ref,c)+Number(g.q||0)-Number(g.l||0); if(v){(reste[ref]=reste[ref]||{})[c]=v;} }); });
+  const clients=Array.from(new Set(SC_CLIENTS.concat([cl])));
+  api('saveCommandesSemaine',{password:ADMIN_PWD,week:scWeek(),annee:Number(document.getElementById('scAnnee').value),semaine:Number(document.getElementById('scSemaine').value),data:SC_DATA,reste:reste,clients:clients}).then(function(){ toast('Enregistré ✔','ok'); scOverview(); }).catch(function(e){toast(e.message,'err');}); }
+function scFillLivrer(){ const cl=document.getElementById('scClient').value; if(!cl){toast('Choisis un client','err');return;}
+  const an=Number(document.getElementById('scAnnee').value), sem=Number(document.getElementById('scSemaine').value);
+  const ws=weekToDate(an,sem); const we=new Date(new Date(ws).getTime()+6*864e5).toISOString().slice(0,10); scGather();
+  api('getLivraisons',{}).then(function(r){ const acc={};
+    (r.rows||[]).forEach(function(b){ if(b.Client!==cl)return; const dt=isoD(b.Date); if(dt<ws||dt>we)return; (b.lignes||[]).forEach(function(ln){ const ref=ln.ref||ln.Ref; const q=Number(ln.qte||ln.Qte||0); if(!ref||!q)return; acc[ref]=(acc[ref]||0)+q; }); });
+    Object.keys(acc).forEach(function(ref){ (SC_DATA[ref]=SC_DATA[ref]||{}); SC_DATA[ref][cl]=Object.assign({q:0},SC_DATA[ref][cl],{l:acc[ref]}); });
+    scRenderClient(); toast('Livré rempli depuis les BL ✔','ok');
+  }).catch(function(e){toast(e.message,'err');}); }
+function scOvRows(){ scGather(); const by={}; Object.keys(SC_DATA).forEach(function(ref){ Object.keys(SC_DATA[ref]).forEach(function(c){ const g=SC_DATA[ref][c]; if(!by[c])by[c]={Client:c,cmd:0,liv:0,reste:0}; by[c].cmd+=Number(g.q||0); by[c].liv+=Number(g.l||0); by[c].reste+=scRet(ref,c)+Number(g.q||0)-Number(g.l||0); }); });
+  return Object.keys(by).map(function(k){return by[k];}).sort(function(a,b){return b.reste-a.reste;}); }
+function scOverview(){ const rows=scOvRows();
+  document.getElementById('scOv').innerHTML= rows.length? '<div class="tbl-wrap"><table><thead><tr><th>Client</th><th>Commandé</th><th>Livré</th><th>Reste</th></tr></thead><tbody>'
+    +rows.map(function(x){return '<tr><td>'+esc(x.Client)+'</td><td>'+x.cmd+'</td><td>'+x.liv+'</td><td'+(x.reste>0?' style="color:var(--danger);font-weight:700"':'')+'>'+x.reste+'</td></tr>';}).join('')
+    +'</tbody></table></div>' : '<div class="empty">Aucune commande cette semaine.</div>'; }
+function scExcel(){ const cl=document.getElementById('scClient').value; scGather();
+  const wb=XLSX.utils.book_new();
+  if(cl){ const rows=CO_REFS.map(function(r){ const g=scGet(r.ref,cl); const ret=scRet(r.ref,cl); return {Ref:r.ref,Mesure:r.mesure,Retard:ret,Commande:g.q||0,Livre:g.l||0,Reste:ret+Number(g.q||0)-Number(g.l||0)};}).filter(function(x){return x.Commande||x.Livre||x.Retard;});
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), (cl||'Client').slice(0,28)); }
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(scOvRows().map(function(x){return {Client:x.Client,Commande:x.cmd,Livre:x.liv,Reste:x.reste};})), 'Vue ensemble');
+  XLSX.writeFile(wb,'Suivi_commandes_S'+document.getElementById('scSemaine').value+'.xlsx'); }
+function scPdf(){ const J=window.jspdf; if(!J||!J.jsPDF){toast('PDF indisponible','err');return;} const cl=document.getElementById('scClient').value; scGather();
+  const doc=new J.jsPDF({unit:'mm',format:'a4'}); doc.setFillColor(22,74,52);doc.rect(0,0,210,18,'F');doc.setTextColor(255);doc.setFont(undefined,'bold');doc.setFontSize(14);doc.text('VALORISE — Suivi commandes',14,12);
+  doc.setTextColor(25);doc.setFont(undefined,'normal');doc.setFontSize(10); doc.text('Semaine '+document.getElementById('scSemaine').value+'/'+document.getElementById('scAnnee').value+(cl?('    Client : '+cl):''),14,26);
+  if(cl){ const rows=CO_REFS.map(function(r){ const g=scGet(r.ref,cl); const ret=scRet(r.ref,cl); return [r.ref,r.mesure,ret,g.q||0,g.l||0,ret+Number(g.q||0)-Number(g.l||0)];}).filter(function(x){return x[3]||x[4]||x[2];});
+    doc.autoTable({startY:31,head:[['Réf','Mesure','Retard','Commandé','Livré','Reste']],body:rows,styles:{fontSize:9},headStyles:{fillColor:[46,125,85]}}); }
+  doc.autoTable({startY:(doc.lastAutoTable?doc.lastAutoTable.finalY+6:31),head:[['Client','Commandé','Livré','Reste']],body:scOvRows().map(function(x){return [x.Client,x.cmd,x.liv,x.reste];}),styles:{fontSize:9},headStyles:{fillColor:[46,125,85]}});
+  doc.save('Suivi_commandes.pdf'); }
 
 /* ================= COMMANDES & SUIVI (style G CMD PAL) ================= */
 /* CO_DATA = { ref: { client: {q:qte, l:livrer} } } ; CO_RETARD = { ref:{client:reste_semaine_precedente} } */
