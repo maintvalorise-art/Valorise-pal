@@ -1112,7 +1112,7 @@ tr.alert td{background:var(--danger-soft)}
   </section>
 </main>
 
-<div class="foot">Valorise — outil interne · <b>version 6.9-SUPABASE · 03-01 · module + etat traitement</b> · <span id="userTag2"></span></div>
+<div class="foot">Valorise — outil interne · <b>version 7.0-SUPABASE · 03-01 · semaine dimanche</b> · <span id="userTag2"></span></div>
 </div><!-- /appWrap -->
 <div class="toast" id="toast"></div>
 
@@ -1123,7 +1123,7 @@ let ADMIN_PWD = '';
 
 function toast(msg, type){ const t=document.getElementById('toast'); t.textContent=msg; t.className='toast show '+(type||''); setTimeout(function(){t.className='toast';},2600); }
 function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
-function isoWeek(str){ const d=new Date(str+'T00:00:00'); const t=new Date(d.getFullYear(),d.getMonth(),d.getDate()); const day=(t.getDay()+6)%7; t.setDate(t.getDate()-day+3); const f=new Date(t.getFullYear(),0,4); const w=1+Math.round(((t-f)/864e5-3+((f.getDay()+6)%7))/7); return {annee:t.getFullYear(),semaine:w}; }
+function isoWeek(str){ const d=new Date(str+'T00:00:00'); d.setDate(d.getDate()+1); /* semaine métier dimanche→samedi : on décale d'1 jour */ const t=new Date(d.getFullYear(),d.getMonth(),d.getDate()); const day=(t.getDay()+6)%7; t.setDate(t.getDate()-day+3); const f=new Date(t.getFullYear(),0,4); const w=1+Math.round(((t-f)/864e5-3+((f.getDay()+6)%7))/7); return {annee:t.getFullYear(),semaine:w}; }
 function todayStr(){ return new Date().toISOString().slice(0,10); }
 
 function sleep(ms){ return new Promise(function(r){ setTimeout(r,ms); }); }
@@ -2090,6 +2090,7 @@ function loadPlanningWeek(){
   }).catch(function(err){toast(err.message,'err');});
 }
 function weekToDate(annee,semaine){ const s=new Date(annee,0,4); const day=(s.getDay()+6)%7; s.setDate(s.getDate()-day+(semaine-1)*7);
+  s.setDate(s.getDate()-1); /* reculer au dimanche = début de semaine métier */
   return s.getFullYear()+'-'+String(s.getMonth()+1).padStart(2,'0')+'-'+String(s.getDate()).padStart(2,'0'); }
 function savePlanning(){
   const an=Number(document.getElementById('plAnnee').value), sem=Number(document.getElementById('plSemaine').value);
