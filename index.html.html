@@ -1137,7 +1137,7 @@ tr.alert td{background:var(--danger-soft)}
   </section>
 </main>
 
-<div class="foot">Valorise — outil interne · <b>version 7.2-SUPABASE · 03-01 · suivi cmd complet</b> · <span id="userTag2"></span></div>
+<div class="foot">Valorise — outil interne · <b>version 7.3-SUPABASE · 03-01 · fix livré suivi</b> · <span id="userTag2"></span></div>
 </div><!-- /appWrap -->
 <div class="toast" id="toast"></div>
 
@@ -2204,10 +2204,14 @@ function scLoad(){ const an=Number(document.getElementById('scAnnee').value), se
 }
 function scGet(ref,cl){ return (SC_DATA[ref]&&SC_DATA[ref][cl])||{q:0,l:0}; }
 function scRet(ref,cl){ return Number((SC_RETARD[ref]&&SC_RETARD[ref][cl])||0); }
+function scRefCode(s){ return String(s||'').split(/\s+[—\u2014]\s+/)[0].trim(); }
+function scRefsForClient(cl){ const list=CO_REFS.map(function(r){return {ref:r.ref,mesure:r.mesure};}); const seen={}; list.forEach(function(r){seen[r.ref]=1;});
+  [SC_DATA,SC_RETARD].forEach(function(src){ Object.keys(src).forEach(function(ref){ if(src[ref] && src[ref][cl]!==undefined && !seen[ref]){ seen[ref]=1; list.push({ref:ref,mesure:''}); } }); });
+  return list; }
 function scRenderClient(){ const cl=document.getElementById('scClient').value;
   if(!cl){ document.getElementById('scBody').innerHTML='<div class="empty">Choisis un client.</div>'; return; }
   let h='<div class="tbl-wrap"><table><thead><tr><th>Réf</th><th>Mesure</th><th>Retard</th><th>Commandé</th><th>Livré</th><th>Reste</th></tr></thead><tbody>';
-  CO_REFS.forEach(function(r){ const g=scGet(r.ref,cl); const ret=scRet(r.ref,cl); const reste=ret+Number(g.q||0)-Number(g.l||0);
+  scRefsForClient(cl).forEach(function(r){ const g=scGet(r.ref,cl); const ret=scRet(r.ref,cl); const reste=ret+Number(g.q||0)-Number(g.l||0);
     h+='<tr data-ref="'+esc(r.ref)+'"><td><b>'+esc(r.ref)+'</b></td><td>'+esc(r.mesure)+'</td>'
       +'<td class="scRet">'+(ret||'')+'</td>'
       +'<td><input type="number" class="scQ" min="0" value="'+(g.q||'')+'" oninput="scRecalc(this)" style="width:70px"></td>'
@@ -2229,10 +2233,14 @@ function scSave(){ const cl=document.getElementById('scClient').value; if(!cl){t
 function scFillLivrer(){ const cl=document.getElementById('scClient').value; if(!cl){toast('Choisis un client','err');return;}
   const an=Number(document.getElementById('scAnnee').value), sem=Number(document.getElementById('scSemaine').value);
   const ws=weekToDate(an,sem); const we=new Date(new Date(ws).getTime()+6*864e5).toISOString().slice(0,10); scGather();
-  api('getLivraisons',{}).then(function(r){ const acc={};
-    (r.rows||[]).forEach(function(b){ if(b.Client!==cl)return; const dt=isoD(b.Date); if(dt<ws||dt>we)return; (b.lignes||[]).forEach(function(ln){ const ref=ln.ref||ln.Ref; const q=Number(ln.qte||ln.Qte||0); if(!ref||!q)return; acc[ref]=(acc[ref]||0)+q; }); });
+  const nc=norm(cl); const refByCode={}; CO_REFS.forEach(function(r){ refByCode[norm(scRefCode(r.ref))]=r.ref; });
+  api('getLivraisons',{}).then(function(r){ const acc={}; let nb=0;
+    (r.rows||[]).forEach(function(b){ if(norm(b.Client)!==nc)return; const dt=isoD(b.Date); if(dt<ws||dt>we)return;
+      (b.lignes||[]).forEach(function(ln){ const code=scRefCode(ln.ref||ln.Ref||''); if(!code)return; const q=Number(ln.qte||ln.Qte||0); if(!q)return;
+        const match=refByCode[norm(code)]||code; acc[match]=(acc[match]||0)+q; nb++; }); });
     Object.keys(acc).forEach(function(ref){ (SC_DATA[ref]=SC_DATA[ref]||{}); SC_DATA[ref][cl]=Object.assign({q:0},SC_DATA[ref][cl],{l:acc[ref]}); });
-    scRenderClient(); toast('Livré rempli depuis les BL ✔','ok');
+    scRenderClient();
+    toast(nb?('Livré rempli : '+Object.keys(acc).length+' réf ✔'):('Aucune livraison pour '+cl+' cette semaine'), nb?'ok':'err');
   }).catch(function(e){toast(e.message,'err');}); }
 function scOvRows(){ scGather(); const by={}; Object.keys(SC_DATA).forEach(function(ref){ Object.keys(SC_DATA[ref]).forEach(function(c){ const g=SC_DATA[ref][c]; if(!by[c])by[c]={Client:c,ret:0,cmd:0,liv:0,reste:0}; by[c].ret+=scRet(ref,c); by[c].cmd+=Number(g.q||0); by[c].liv+=Number(g.l||0); by[c].reste+=scRet(ref,c)+Number(g.q||0)-Number(g.l||0); }); });
   // inclure aussi les retards de clients sans commande cette semaine
