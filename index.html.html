@@ -942,26 +942,20 @@ tr.alert td{background:var(--danger-soft)}
 
   <!-- ============ SUIVI COMMANDES (simple, 1 client) ============ -->
   <section class="view" data-view="suivicmd">
-    <div class="vhead"><div class="eyebrow">Client</div><h2>Suivi commandes — par client</h2>
-      <p>Choisis un client : commandé / livré / reste par type. Vue simple + vue d'ensemble.</p></div>
+    <div class="vhead"><div class="eyebrow">Client</div><h2>État suivi commandes</h2>
+      <p>Le « Livré » se calcule automatiquement depuis les BL. Commandé · Livré · Retard · Reste — tout sur une page.</p></div>
     <div class="admin-body" data-admin="suivicmd">
       <div class="card">
         <div class="grid g3" style="margin-bottom:10px">
           <div class="field"><label>Année</label><input type="number" id="scAnnee"></div>
           <div class="field"><label>Semaine</label><input type="number" id="scSemaine"></div>
-          <div class="field"><label>Client</label><select id="scClient" onchange="scRenderClient()"><option value="">— choisir —</option></select></div>
+          <div class="field"><label>Client</label><select id="scClient" onchange="scRender()"><option value="">Tous les clients</option></select></div>
         </div>
-        <div class="row-actions" style="margin-bottom:10px">
-          <button class="btn ghost sm" onclick="scLoad()">Charger</button>
-          <button class="btn ghost sm" onclick="scFillLivrer()">Remplir « Livré » depuis les BL</button>
-          <button class="btn ghost sm" onclick="scExcel()">Excel</button>
-          <button class="btn ghost sm" onclick="scPdf()">PDF</button>
-        </div>
-        <div id="scBody"><div class="empty">Choisis un client.</div></div>
-        <button class="btn" style="width:100%;margin-top:10px" onclick="scSave()">Enregistrer</button>
+        <div class="row-actions"><button class="btn ghost" onclick="scLoad()">Actualiser</button><button class="btn ghost sm" onclick="scExcel()">Excel</button><button class="btn ghost sm" onclick="scPdf()">PDF</button></div>
       </div>
-      <div class="card"><h3>Vue d'ensemble — tous les clients</h3><div id="scOv"></div></div>
-      <div class="card"><h3>Ordre de production — semaine suivante</h3><p class="muted" style="margin-top:0">Reste à produire (backlog) par référence, tous clients.</p><div id="scProd"></div>
+      <div id="scEntry"></div>
+      <div class="card"><h3>État complet</h3><div id="scEtat"></div></div>
+      <div class="card"><h3>Ordre de production — semaine suivante</h3><p class="muted" style="margin-top:0">Reste à produire par référence (tous clients).</p><div id="scProd"></div>
         <button class="btn ghost sm" style="margin-top:8px" onclick="scProdExcel()">Excel ordre</button></div>
     </div>
   </section>
@@ -1137,7 +1131,7 @@ tr.alert td{background:var(--danger-soft)}
   </section>
 </main>
 
-<div class="foot">Valorise — outil interne · <b>version 7.3-SUPABASE · 03-01 · fix livré suivi</b> · <span id="userTag2"></span></div>
+<div class="foot">Valorise — outil interne · <b>version 7.4-SUPABASE · 03-01 · etat suivi auto</b> · <span id="userTag2"></span></div>
 </div><!-- /appWrap -->
 <div class="toast" id="toast"></div>
 
@@ -2189,90 +2183,93 @@ function saveEntree(){
     }).catch(function(err){toast(err.message,'err');});
 }
 
-/* ================= SUIVI COMMANDES (simple, 1 client) ================= */
-let SC_DATA={}, SC_RETARD={}, SC_CLIENTS=[];
+/* ================= SUIVI COMMANDES (état auto) ================= */
+let SC_DATA={}, SC_RETARD={}, SC_LIV={}, SC_CLIENTS=[];
 function initSuivi(){ coBuildRefs(); document.getElementById('scAnnee').value=S.week.annee; document.getElementById('scSemaine').value=S.week.semaine; loadAllClients(function(){}); scLoad(); }
 function scWeek(){ return document.getElementById('scAnnee').value+'-'+document.getElementById('scSemaine').value; }
-function scLoad(){ const an=Number(document.getElementById('scAnnee').value), sem=Number(document.getElementById('scSemaine').value); let pa=an,ps=sem-1; if(ps<1){pa=an-1;ps=52;}
-  document.getElementById('scBody').innerHTML='<div class="loading"><span class="spin"></span> …</div>';
-  Promise.all([api('getCommandesSemaine',{week:an+'-'+sem}),api('getCommandesSemaine',{week:pa+'-'+ps})]).then(function(res){
-    const d=res[0].data, prev=res[1].data; SC_DATA=(d&&d.data)||{}; SC_RETARD=(prev&&prev.reste)||{};
-    const saved=(d&&d.clients)||[]; SC_CLIENTS=Array.from(new Set(saved.concat(ALL_CLIENTS||[]).concat(S.clients||[]).filter(Boolean))).sort();
-    const sel=document.getElementById('scClient'); const cur=sel.value; sel.innerHTML='<option value="">— choisir —</option>'+SC_CLIENTS.map(function(c){return '<option>'+esc(c)+'</option>';}).join(''); sel.value=cur;
-    scRenderClient(); scOverview();
-  }).catch(function(e){ document.getElementById('scBody').innerHTML='<div class="warnbox">'+esc(e.message)+'</div>'; });
-}
-function scGet(ref,cl){ return (SC_DATA[ref]&&SC_DATA[ref][cl])||{q:0,l:0}; }
-function scRet(ref,cl){ return Number((SC_RETARD[ref]&&SC_RETARD[ref][cl])||0); }
 function scRefCode(s){ return String(s||'').split(/\s+[—\u2014]\s+/)[0].trim(); }
-function scRefsForClient(cl){ const list=CO_REFS.map(function(r){return {ref:r.ref,mesure:r.mesure};}); const seen={}; list.forEach(function(r){seen[r.ref]=1;});
-  [SC_DATA,SC_RETARD].forEach(function(src){ Object.keys(src).forEach(function(ref){ if(src[ref] && src[ref][cl]!==undefined && !seen[ref]){ seen[ref]=1; list.push({ref:ref,mesure:''}); } }); });
-  return list; }
-function scRenderClient(){ const cl=document.getElementById('scClient').value;
-  if(!cl){ document.getElementById('scBody').innerHTML='<div class="empty">Choisis un client.</div>'; return; }
-  let h='<div class="tbl-wrap"><table><thead><tr><th>Réf</th><th>Mesure</th><th>Retard</th><th>Commandé</th><th>Livré</th><th>Reste</th></tr></thead><tbody>';
-  scRefsForClient(cl).forEach(function(r){ const g=scGet(r.ref,cl); const ret=scRet(r.ref,cl); const reste=ret+Number(g.q||0)-Number(g.l||0);
-    h+='<tr data-ref="'+esc(r.ref)+'"><td><b>'+esc(r.ref)+'</b></td><td>'+esc(r.mesure)+'</td>'
-      +'<td class="scRet">'+(ret||'')+'</td>'
-      +'<td><input type="number" class="scQ" min="0" value="'+(g.q||'')+'" oninput="scRecalc(this)" style="width:70px"></td>'
-      +'<td><input type="number" class="scL" min="0" value="'+(g.l||'')+'" oninput="scRecalc(this)" style="width:70px"></td>'
-      +'<td class="scR'+(reste>0?' late':'')+'">'+reste+'</td></tr>'; });
-  h+='</tbody></table></div>';
-  document.getElementById('scBody').innerHTML=h;
+function scGet(ref,cl){ return (SC_DATA[ref]&&SC_DATA[ref][cl])||{q:0}; }
+function scRet(ref,cl){ return Number((SC_RETARD[ref]&&SC_RETARD[ref][cl])||0); }
+function scLivOf(ref,cl){ return Number((SC_LIV[ref]&&SC_LIV[ref][cl])||0); }
+function scLoad(){ const an=Number(document.getElementById('scAnnee').value), sem=Number(document.getElementById('scSemaine').value); let pa=an,ps=sem-1; if(ps<1){pa=an-1;ps=52;}
+  document.getElementById('scEtat').innerHTML='<div class="loading"><span class="spin"></span> …</div>';
+  const ws=weekToDate(an,sem); const we=new Date(new Date(ws).getTime()+6*864e5).toISOString().slice(0,10);
+  const refByCode={}; CO_REFS.forEach(function(r){ refByCode[norm(scRefCode(r.ref))]=r.ref; });
+  Promise.all([api('getCommandesSemaine',{week:an+'-'+sem}),api('getCommandesSemaine',{week:pa+'-'+ps}),api('getLivraisons',{})]).then(function(res){
+    const d=res[0].data, prev=res[1].data; SC_DATA=(d&&d.data)||{}; SC_RETARD=(prev&&prev.reste)||{};
+    // Livré AUTO depuis les BL de la semaine
+    SC_LIV={}; (res[2].rows||[]).forEach(function(b){ const dt=isoD(b.Date); if(dt<ws||dt>we)return; const cl=b.Client||''; 
+      (b.lignes||[]).forEach(function(ln){ const code=scRefCode(ln.ref||ln.Ref||''); if(!code)return; const q=Number(ln.qte||ln.Qte||0); if(!q)return;
+        const ref=refByCode[norm(code)]||code; (SC_LIV[ref]=SC_LIV[ref]||{}); SC_LIV[ref][cl]=(SC_LIV[ref][cl]||0)+q; }); });
+    const saved=(d&&d.clients)||[]; SC_CLIENTS=Array.from(new Set(saved.concat(ALL_CLIENTS||[]).concat(S.clients||[]).filter(Boolean))).sort();
+    const sel=document.getElementById('scClient'); const cur=sel.value; sel.innerHTML='<option value="">Tous les clients</option>'+SC_CLIENTS.map(function(c){return '<option>'+esc(c)+'</option>';}).join(''); sel.value=cur;
+    scRender();
+  }).catch(function(e){ document.getElementById('scEtat').innerHTML='<div class="warnbox">'+esc(e.message)+'</div>'; });
+}
+/* liste des réfs concernées pour un client (commande OU livré OU retard) */
+function scRefsClient(cl){ const seen={}, out=[]; CO_REFS.forEach(function(r){ if(scGet(r.ref,cl).q||scLivOf(r.ref,cl)||scRet(r.ref,cl)){ seen[r.ref]=1; out.push({ref:r.ref,mesure:r.mesure}); } });
+  [SC_DATA,SC_LIV,SC_RETARD].forEach(function(src){ Object.keys(src).forEach(function(ref){ if(src[ref]&&src[ref][cl]&&!seen[ref]){ seen[ref]=1; const a=CO_REFS.find(function(x){return x.ref===ref;}); out.push({ref:ref,mesure:a?a.mesure:''}); } }); });
+  return out; }
+/* SAISIE commande pour le client sélectionné */
+function scRender(){ const cl=document.getElementById('scClient').value;
+  // zone de saisie (seulement si un client précis est choisi)
+  const entry=document.getElementById('scEntry');
+  if(cl){ const refs=CO_REFS;
+    let h='<div class="card"><h3>Saisie commande — '+esc(cl)+'</h3><div class="tbl-wrap"><table><thead><tr><th>Réf</th><th>Mesure</th><th>Retard</th><th>Commandé</th><th>Livré (auto)</th><th>Reste</th></tr></thead><tbody>';
+    refs.forEach(function(r){ const q=Number(scGet(r.ref,cl).q||0); const ret=scRet(r.ref,cl); const liv=scLivOf(r.ref,cl); const reste=ret+q-liv;
+      h+='<tr data-ref="'+esc(r.ref)+'"><td><b>'+esc(r.ref)+'</b></td><td>'+esc(r.mesure)+'</td><td class="scRet">'+(ret||'')+'</td>'
+        +'<td><input type="number" class="scQ" min="0" value="'+(q||'')+'" oninput="scRecalc(this)" style="width:70px"></td>'
+        +'<td>'+(liv||'')+'</td><td class="scR'+(reste>0?' late':'')+'">'+reste+'</td></tr>'; });
+    h+='</tbody></table></div><button class="btn" style="width:100%;margin-top:10px" onclick="scSave()">Enregistrer la commande</button></div>';
+    entry.innerHTML=h;
+  } else entry.innerHTML='';
+  scEtat(); scProd();
 }
 function scRecalc(el){ const tr=el.closest('tr'); const ref=tr.dataset.ref; const cl=document.getElementById('scClient').value;
-  const q=Number(tr.querySelector('.scQ').value||0), l=Number(tr.querySelector('.scL').value||0); const reste=scRet(ref,cl)+q-l;
-  const c=tr.querySelector('.scR'); c.textContent=reste; c.className='scR'+(reste>0?' late':''); }
-function scGather(){ const cl=document.getElementById('scClient').value; if(!cl)return;
-  [].forEach.call(document.querySelectorAll('#scBody tr[data-ref]'),function(tr){ const ref=tr.dataset.ref; const q=Number(tr.querySelector('.scQ').value||0), l=Number(tr.querySelector('.scL').value||0);
-    if(q||l){ (SC_DATA[ref]=SC_DATA[ref]||{})[cl]={q:q,l:l}; } else if(SC_DATA[ref]) delete SC_DATA[ref][cl]; }); }
-function scSave(){ const cl=document.getElementById('scClient').value; if(!cl){toast('Choisis un client','err');return;} scGather();
-  const reste={}; Object.keys(SC_DATA).forEach(function(ref){ Object.keys(SC_DATA[ref]).forEach(function(c){ const g=SC_DATA[ref][c]; const v=scRet(ref,c)+Number(g.q||0)-Number(g.l||0); if(v){(reste[ref]=reste[ref]||{})[c]=v;} }); });
+  const q=Number(tr.querySelector('.scQ').value||0); const reste=scRet(ref,cl)+q-scLivOf(ref,cl); const c=tr.querySelector('.scR'); c.textContent=reste; c.className='scR'+(reste>0?' late':''); }
+function scGatherEntry(){ const cl=document.getElementById('scClient').value; if(!cl)return;
+  [].forEach.call(document.querySelectorAll('#scEntry tr[data-ref]'),function(tr){ const ref=tr.dataset.ref; const q=Number(tr.querySelector('.scQ').value||0);
+    if(q){ (SC_DATA[ref]=SC_DATA[ref]||{})[cl]=Object.assign({},SC_DATA[ref][cl],{q:q}); } else if(SC_DATA[ref]&&SC_DATA[ref][cl]){ delete SC_DATA[ref][cl].q; if(!Object.keys(SC_DATA[ref][cl]).length)delete SC_DATA[ref][cl]; } }); }
+function scSave(){ const cl=document.getElementById('scClient').value; if(!cl){toast('Choisis un client','err');return;} scGatherEntry();
+  // reste stocké = retard + commandé - livré(auto)
+  const reste={}; const refsAll={}; Object.keys(SC_DATA).forEach(function(r){refsAll[r]=1;}); Object.keys(SC_LIV).forEach(function(r){refsAll[r]=1;}); Object.keys(SC_RETARD).forEach(function(r){refsAll[r]=1;});
+  Object.keys(refsAll).forEach(function(ref){ const cls={}; [SC_DATA,SC_LIV,SC_RETARD].forEach(function(src){ if(src[ref])Object.keys(src[ref]).forEach(function(c){cls[c]=1;}); });
+    Object.keys(cls).forEach(function(c){ const v=scRet(ref,c)+Number(scGet(ref,c).q||0)-scLivOf(ref,c); if(v){(reste[ref]=reste[ref]||{})[c]=v;} }); });
   const clients=Array.from(new Set(SC_CLIENTS.concat([cl])));
-  api('saveCommandesSemaine',{password:ADMIN_PWD,week:scWeek(),annee:Number(document.getElementById('scAnnee').value),semaine:Number(document.getElementById('scSemaine').value),data:SC_DATA,reste:reste,clients:clients}).then(function(){ toast('Enregistré ✔','ok'); scOverview(); }).catch(function(e){toast(e.message,'err');}); }
-function scFillLivrer(){ const cl=document.getElementById('scClient').value; if(!cl){toast('Choisis un client','err');return;}
-  const an=Number(document.getElementById('scAnnee').value), sem=Number(document.getElementById('scSemaine').value);
-  const ws=weekToDate(an,sem); const we=new Date(new Date(ws).getTime()+6*864e5).toISOString().slice(0,10); scGather();
-  const nc=norm(cl); const refByCode={}; CO_REFS.forEach(function(r){ refByCode[norm(scRefCode(r.ref))]=r.ref; });
-  api('getLivraisons',{}).then(function(r){ const acc={}; let nb=0;
-    (r.rows||[]).forEach(function(b){ if(norm(b.Client)!==nc)return; const dt=isoD(b.Date); if(dt<ws||dt>we)return;
-      (b.lignes||[]).forEach(function(ln){ const code=scRefCode(ln.ref||ln.Ref||''); if(!code)return; const q=Number(ln.qte||ln.Qte||0); if(!q)return;
-        const match=refByCode[norm(code)]||code; acc[match]=(acc[match]||0)+q; nb++; }); });
-    Object.keys(acc).forEach(function(ref){ (SC_DATA[ref]=SC_DATA[ref]||{}); SC_DATA[ref][cl]=Object.assign({q:0},SC_DATA[ref][cl],{l:acc[ref]}); });
-    scRenderClient();
-    toast(nb?('Livré rempli : '+Object.keys(acc).length+' réf ✔'):('Aucune livraison pour '+cl+' cette semaine'), nb?'ok':'err');
-  }).catch(function(e){toast(e.message,'err');}); }
-function scOvRows(){ scGather(); const by={}; Object.keys(SC_DATA).forEach(function(ref){ Object.keys(SC_DATA[ref]).forEach(function(c){ const g=SC_DATA[ref][c]; if(!by[c])by[c]={Client:c,ret:0,cmd:0,liv:0,reste:0}; by[c].ret+=scRet(ref,c); by[c].cmd+=Number(g.q||0); by[c].liv+=Number(g.l||0); by[c].reste+=scRet(ref,c)+Number(g.q||0)-Number(g.l||0); }); });
-  // inclure aussi les retards de clients sans commande cette semaine
-  Object.keys(SC_RETARD).forEach(function(ref){ Object.keys(SC_RETARD[ref]).forEach(function(c){ if(!by[c]){ by[c]={Client:c,ret:0,cmd:0,liv:0,reste:0}; by[c].ret+=scRet(ref,c); by[c].reste+=scRet(ref,c); } }); });
-  return Object.keys(by).map(function(k){return by[k];}).sort(function(a,b){return b.reste-a.reste;}); }
-function scOverview(){ const rows=scOvRows();
-  document.getElementById('scOv').innerHTML= rows.length? '<div class="tbl-wrap"><table><thead><tr><th>Client</th><th>Retard (S-1)</th><th>Commandé</th><th>Livré</th><th>Reste</th></tr></thead><tbody>'
-    +rows.map(function(x){return '<tr><td>'+esc(x.Client)+'</td><td>'+(x.ret||'')+'</td><td>'+x.cmd+'</td><td>'+x.liv+'</td><td'+(x.reste>0?' style="color:var(--danger);font-weight:700"':'')+'>'+x.reste+'</td></tr>';}).join('')
-    +'</tbody></table></div>' : '<div class="empty">Aucune commande cette semaine.</div>'; scProd(); }
-function scProdData(){ scGather(); const need={}; CO_REFS.forEach(function(r){ let s=0; Object.keys(SC_DATA[r.ref]||{}).forEach(function(c){ const g=SC_DATA[r.ref][c]; const reste=scRet(r.ref,c)+Number(g.q||0)-Number(g.l||0); if(reste>0)s+=reste; });
-    // retards purs (clients sans commande)
-    Object.keys(SC_RETARD[r.ref]||{}).forEach(function(c){ if(!(SC_DATA[r.ref]&&SC_DATA[r.ref][c])){ const v=scRet(r.ref,c); if(v>0)s+=v; } });
-    if(s>0)need[r.ref]={ref:r.ref,mesure:r.mesure,type:r.type,qte:s}; });
+  api('saveCommandesSemaine',{password:ADMIN_PWD,week:scWeek(),annee:Number(document.getElementById('scAnnee').value),semaine:Number(document.getElementById('scSemaine').value),data:SC_DATA,reste:reste,clients:clients}).then(function(){ toast('Commande enregistrée ✔','ok'); scEtat(); scProd(); }).catch(function(e){toast(e.message,'err');}); }
+/* GRAND TABLEAU état — tous les clients (ou filtré) */
+function scEtatRows(){ const filt=document.getElementById('scClient').value;
+  const clients=filt?[filt]:SC_CLIENTS; const out=[];
+  clients.forEach(function(cl){ const refs=scRefsClient(cl); if(!refs.length)return; let sc=0,sl=0,sr=0,sret=0;
+    refs.forEach(function(r){ const q=Number(scGet(r.ref,cl).q||0), liv=scLivOf(r.ref,cl), ret=scRet(r.ref,cl), reste=ret+q-liv;
+      out.push({client:cl,ref:r.ref,mesure:r.mesure,ret:ret,cmd:q,liv:liv,reste:reste,sub:false}); sc+=q;sl+=liv;sr+=reste;sret+=ret; });
+    out.push({client:cl,ref:'TOTAL '+cl,mesure:'',ret:sret,cmd:sc,liv:sl,reste:sr,sub:true}); });
+  return out; }
+function scEtat(){ scGatherEntry(); const rows=scEtatRows();
+  if(!rows.length){ document.getElementById('scEtat').innerHTML='<div class="empty">Aucune commande / livraison cette semaine.</div>'; return; }
+  let gc=0,gl=0,gr=0; rows.forEach(function(x){ if(!x.sub){gc+=x.cmd;gl+=x.liv;gr+=x.reste;} });
+  let h='<div class="tbl-wrap"><table><thead><tr><th>Client</th><th>Réf</th><th>Mesure</th><th>Retard</th><th>Commandé</th><th>Livré</th><th>Reste</th></tr></thead><tbody>';
+  h+=rows.map(function(x){ if(x.sub) return '<tr style="background:var(--green-soft);font-weight:700"><td></td><td colspan="2">'+esc(x.ref)+'</td><td>'+(x.ret||'')+'</td><td>'+x.cmd+'</td><td>'+x.liv+'</td><td'+(x.reste>0?' style="color:var(--danger)"':'')+'>'+x.reste+'</td></tr>';
+    return '<tr><td>'+esc(x.client)+'</td><td><b>'+esc(x.ref)+'</b></td><td>'+esc(x.mesure)+'</td><td>'+(x.ret||'')+'</td><td>'+x.cmd+'</td><td>'+x.liv+'</td><td'+(x.reste>0?' style="color:var(--danger);font-weight:600"':'')+'>'+x.reste+'</td></tr>'; }).join('');
+  h+='<tr style="background:var(--green);color:#fff;font-weight:800"><td colspan="4">TOTAL GÉNÉRAL</td><td>'+gc+'</td><td>'+gl+'</td><td>'+gr+'</td></tr>';
+  h+='</tbody></table></div>';
+  document.getElementById('scEtat').innerHTML=h;
+}
+function scProdData(){ const need={}; CO_REFS.forEach(function(r){ let s=0; const cls={}; [SC_DATA,SC_LIV,SC_RETARD].forEach(function(src){ if(src[r.ref])Object.keys(src[r.ref]).forEach(function(c){cls[c]=1;}); });
+    Object.keys(cls).forEach(function(c){ const reste=scRet(r.ref,c)+Number(scGet(r.ref,c).q||0)-scLivOf(r.ref,c); if(reste>0)s+=reste; }); if(s>0)need[r.ref]={ref:r.ref,mesure:r.mesure,type:r.type,qte:s}; });
   return Object.keys(need).map(function(k){return need[k];}); }
 function scProd(){ const rows=scProdData();
   document.getElementById('scProd').innerHTML= rows.length? '<div class="tbl-wrap"><table><thead><tr><th>Réf</th><th>Mesure</th><th>Type</th><th>À produire</th></tr></thead><tbody>'
     +rows.map(function(x){return '<tr><td><b>'+esc(x.ref)+'</b></td><td>'+esc(x.mesure)+'</td><td>'+esc(x.type)+'</td><td><b>'+x.qte+'</b></td></tr>';}).join('')+'</tbody></table></div>'
-    : '<div class="empty">Aucun reste à produire (tout livré).</div>'; }
-function scProdExcel(){ const rows=scProdData(); if(!rows.length){toast('Rien à produire','err');return;} exportExcel(rows.map(function(x){return {Ref:x.ref,Mesure:x.mesure,Type:x.type,AProduire:x.qte};}),'OrdreProd','Ordre_prod.xlsx'); }
-function scExcel(){ const cl=document.getElementById('scClient').value; scGather();
-  const wb=XLSX.utils.book_new();
-  if(cl){ const rows=CO_REFS.map(function(r){ const g=scGet(r.ref,cl); const ret=scRet(r.ref,cl); return {Ref:r.ref,Mesure:r.mesure,Retard:ret,Commande:g.q||0,Livre:g.l||0,Reste:ret+Number(g.q||0)-Number(g.l||0)};}).filter(function(x){return x.Commande||x.Livre||x.Retard;});
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), (cl||'Client').slice(0,28)); }
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(scOvRows().map(function(x){return {Client:x.Client,Commande:x.cmd,Livre:x.liv,Reste:x.reste};})), 'Vue ensemble');
-  XLSX.writeFile(wb,'Suivi_commandes_S'+document.getElementById('scSemaine').value+'.xlsx'); }
-function scPdf(){ const J=window.jspdf; if(!J||!J.jsPDF){toast('PDF indisponible','err');return;} const cl=document.getElementById('scClient').value; scGather();
-  const doc=new J.jsPDF({unit:'mm',format:'a4'}); doc.setFillColor(22,74,52);doc.rect(0,0,210,18,'F');doc.setTextColor(255);doc.setFont(undefined,'bold');doc.setFontSize(14);doc.text('VALORISE — Suivi commandes',14,12);
-  doc.setTextColor(25);doc.setFont(undefined,'normal');doc.setFontSize(10); doc.text('Semaine '+document.getElementById('scSemaine').value+'/'+document.getElementById('scAnnee').value+(cl?('    Client : '+cl):''),14,26);
-  if(cl){ const rows=CO_REFS.map(function(r){ const g=scGet(r.ref,cl); const ret=scRet(r.ref,cl); return [r.ref,r.mesure,ret,g.q||0,g.l||0,ret+Number(g.q||0)-Number(g.l||0)];}).filter(function(x){return x[3]||x[4]||x[2];});
-    doc.autoTable({startY:31,head:[['Réf','Mesure','Retard','Commandé','Livré','Reste']],body:rows,styles:{fontSize:9},headStyles:{fillColor:[46,125,85]}}); }
-  doc.autoTable({startY:(doc.lastAutoTable?doc.lastAutoTable.finalY+6:31),head:[['Client','Commandé','Livré','Reste']],body:scOvRows().map(function(x){return [x.Client,x.cmd,x.liv,x.reste];}),styles:{fontSize:9},headStyles:{fillColor:[46,125,85]}});
-  doc.save('Suivi_commandes.pdf'); }
+    : '<div class="empty">Aucun reste à produire.</div>'; }
+function scProdExcel(){ const rows=scProdData(); if(!rows.length){toast('Rien à produire','err');return;} exportExcel(rows.map(function(x){return {Ref:x.ref,Mesure:x.mesure,Type:x.type,AProduire:x.qte};}),'OrdreProd','Ordre_prod_S'+document.getElementById('scSemaine').value+'.xlsx'); }
+function scExcel(){ const rows=scEtatRows(); if(!rows.length){toast('Rien à exporter','err');return;}
+  exportExcel(rows.filter(function(x){return !x.sub;}).map(function(x){return {Client:x.client,Ref:x.ref,Mesure:x.mesure,Retard:x.ret,Commande:x.cmd,Livre:x.liv,Reste:x.reste};}),'Etat','Etat_suivi_S'+document.getElementById('scSemaine').value+'.xlsx'); }
+function scPdf(){ const J=window.jspdf; if(!J||!J.jsPDF){toast('PDF indisponible','err');return;} const rows=scEtatRows(); if(!rows.length){toast('Rien à exporter','err');return;}
+  const doc=new J.jsPDF({unit:'mm',format:'a4'}); doc.setFillColor(22,74,52);doc.rect(0,0,210,18,'F');doc.setTextColor(255);doc.setFont(undefined,'bold');doc.setFontSize(14);doc.text('VALORISE — État suivi commandes',14,12);
+  doc.setTextColor(25);doc.setFont(undefined,'normal');doc.setFontSize(10); doc.text('Semaine '+document.getElementById('scSemaine').value+'/'+document.getElementById('scAnnee').value,14,26);
+  doc.autoTable({startY:31,head:[['Client','Réf','Mesure','Retard','Cmd','Livré','Reste']],body:rows.map(function(x){return [x.sub?'':x.client,x.ref,x.mesure,x.ret,x.cmd,x.liv,x.reste];}),styles:{fontSize:8},headStyles:{fillColor:[46,125,85]},didParseCell:function(dd){ if(rows[dd.row.index]&&rows[dd.row.index].sub){dd.cell.styles.fillColor=[231,241,235];dd.cell.styles.fontStyle='bold';} }});
+  doc.save('Etat_suivi.pdf'); }
 
 /* ================= COMMANDES & SUIVI (style G CMD PAL) ================= */
 /* CO_DATA = { ref: { client: {q:qte, l:livrer} } } ; CO_RETARD = { ref:{client:reste_semaine_precedente} } */
