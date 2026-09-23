@@ -417,6 +417,35 @@ tr.alert td{background:var(--danger-soft)}
     </div>
   </section>
 
+  <!-- ============ DEMANDES (TL) ============ -->
+  <section class="view" data-view="demandes">
+    <div class="vhead"><div class="eyebrow">Team Leader</div><h2>Demandes — congé / autorisation</h2>
+      <p>Crée une demande pour un opérateur. L'admin l'approuve, puis elle s'applique au pointage.</p></div>
+    <div class="card">
+      <div class="grid g2">
+        <div class="field"><label>Type</label><select id="dmType" onchange="dmToggle()"><option value="Conge">Congé</option><option value="Autorisation">Autorisation</option></select></div>
+        <div class="field"><label>Chef d'équipe</label><select id="dmChef" onchange="dmFillOps()"></select></div>
+        <div class="field"><label>Opérateur</label><select id="dmOp"></select></div>
+        <div class="field"><label>Motif</label><input id="dmMotif" placeholder="raison (optionnel)"></div>
+      </div>
+      <div id="dmConge">
+        <div class="grid g2">
+          <div class="field"><label>Du</label><input type="date" id="dmDu"></div>
+          <div class="field"><label>Au</label><input type="date" id="dmAu"></div>
+        </div>
+      </div>
+      <div id="dmAuto" style="display:none">
+        <div class="grid g3">
+          <div class="field"><label>Date</label><input type="date" id="dmDate"></div>
+          <div class="field"><label>Heure sortie</label><input type="time" id="dmH1"></div>
+          <div class="field"><label>Heure retour</label><input type="time" id="dmH2"><span class="muted" style="font-size:11px">(vide = ne revient pas)</span></div>
+        </div>
+      </div>
+      <button class="btn" style="width:100%;margin-top:12px" onclick="dmSubmit()">Envoyer la demande</button>
+    </div>
+    <div class="card"><h3>Demandes récentes</h3><div id="dmList"></div></div>
+  </section>
+
   <!-- ============ MATRICE TEAM LEADER ============ -->
   <section class="view" data-view="tlmatrice">
     <div class="vhead"><div class="eyebrow">Team Leader</div><h2>Matrice postes / opérateurs</h2>
@@ -591,6 +620,23 @@ tr.alert td{background:var(--danger-soft)}
         </div>
         <button class="btn ghost" onclick="loadAbsHisto()" style="margin-bottom:10px">Actualiser</button>
         <div id="ahBody"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ DEMANDES RH (admin) ============ -->
+  <section class="view" data-view="demrh">
+    <div class="vhead"><div class="eyebrow">Gestion RH</div><h2>Demandes de congé / autorisation</h2>
+      <p>Approuve ou refuse. Une demande approuvée s'applique automatiquement au pointage et donne une fiche imprimable.</p></div>
+    <div class="admin-body" data-admin="demrh">
+      <div class="card">
+        <div class="grid g3" style="margin-bottom:10px">
+          <div class="field"><label>Statut</label><select id="drStatut" onchange="drRender()"><option value="">Tous</option><option>En attente</option><option>Approuvée</option><option>Refusée</option></select></div>
+          <div class="field"><label>Type</label><select id="drType" onchange="drRender()"><option value="">Tous</option><option>Conge</option><option>Autorisation</option></select></div>
+          <div class="field"><label>Recherche</label><input id="drSearch" oninput="drRender()" placeholder="nom, chef…"></div>
+        </div>
+        <button class="btn ghost" onclick="loadDemRh()">Actualiser</button>
+        <div id="drBody" style="margin-top:10px"></div>
       </div>
     </div>
   </section>
@@ -1131,7 +1177,7 @@ tr.alert td{background:var(--danger-soft)}
   </section>
 </main>
 
-<div class="foot">Valorise — outil interne · <b>version 7.4-SUPABASE · 03-01 · etat suivi auto</b> · <span id="userTag2"></span></div>
+<div class="foot">Valorise — outil interne · <b>version 7.5-SUPABASE · 03-01 · demandes conge/autorisation</b> · <span id="userTag2"></span></div>
 </div><!-- /appWrap -->
 <div class="toast" id="toast"></div>
 
@@ -1220,7 +1266,7 @@ async function sbForgot(){ const em=document.getElementById('lgEmail').value.tri
   if(!em){ msg.textContent='Saisis ton email d\'abord'; return; }
   const {error}=await SB.auth.resetPasswordForEmail(em); msg.textContent=error?('Erreur : '+error.message):'Email de réinitialisation envoyé ✔ (vérifie ta boîte)'; }
 async function sbLogout(){ await SB.auth.signOut(); location.reload(); }
-const WRITE=['saveEmploye','deleteEmploye','saveAffectation','savePlanning','saveAbsence','saveArticle','deleteArticle','saveEntree','saveSortie','saveCommande','saveOrdreProd','saveFiche','deleteFiche','savePoste','deletePoste','saveBom','deleteBom','saveQuotation','setAdminPassword','saveLivraison','savePlanLiv','setBlNext','importLivraisons','updateLivraison','deleteLivraison','clearLivraisons','deleteLivBulk','deleteFicheAbsence','saveTraitement','deleteTraitement','saveCommandesSemaine','saveZ2Mouv','deleteZ2Mouv','saveZ2Article','deleteZ2Article','importZ2','clearZ2','saveNoteTL'];
+const WRITE=['saveEmploye','deleteEmploye','saveAffectation','savePlanning','saveAbsence','saveArticle','deleteArticle','saveEntree','saveSortie','saveCommande','saveOrdreProd','saveFiche','deleteFiche','savePoste','deletePoste','saveBom','deleteBom','saveQuotation','setAdminPassword','saveLivraison','savePlanLiv','setBlNext','importLivraisons','updateLivraison','deleteLivraison','clearLivraisons','deleteLivBulk','deleteFicheAbsence','saveTraitement','deleteTraitement','saveCommandesSemaine','saveZ2Mouv','deleteZ2Mouv','saveZ2Article','deleteZ2Article','importZ2','clearZ2','saveNoteTL','saveDemande','deleteDemande'];
 
 async function fb_importLivraisons(p){ const docs=p.docs||[];
   for(var i=0;i<docs.length;i+=400){ const batch=db.batch();
@@ -1271,6 +1317,9 @@ async function route(action,p){
     case 'saveAbsence':    return await fb_saveAbsence(p);
     case 'getAbsences':    { const s=await db.collection('absences').where('Date','>=',isoD(p.du)).where('Date','<=',isoD(p.au)).get(); return {ok:true, rows:s.docs.map(function(d){return d.data();})}; }
     case 'getFichesAbsence': { const s=await db.collection('fichesAbsence').get(); return {ok:true, rows:s.docs.map(function(d){return d.data();})}; }
+    case 'getDemandes':    { const s=await db.collection('demandes').get(); return {ok:true, rows:s.docs.map(function(d){return Object.assign({DID:d.id},d.data());})}; }
+    case 'saveDemande':    { const id=(p.rec&&p.rec.DID)||uid('DEM-'); await db.collection('demandes').doc(id).set(Object.assign({},p.rec,{DID:id})); return {ok:true,id:id}; }
+    case 'deleteDemande':  if(p.id) await db.collection('demandes').doc(String(p.id)).delete(); return {ok:true};
     case 'deleteFicheAbsence': { const f=await db.collection('fichesAbsence').doc(String(p.fid)).get(); if(f.exists){ const fd=f.data(); const q=await db.collection('absences').where('Date','==',isoD(fd.Date)).where('Equipe','==',fd.Equipe).get(); const b=db.batch(); q.docs.forEach(function(d){b.delete(d.ref);}); b.delete(f.ref); await b.commit(); } return {ok:true}; }
     case 'saveTraitement': { const id=(p.rec&&p.rec.TID)||uid('TR-'); await db.collection('traitements').doc(id).set(Object.assign({},p.rec,{TID:id})); return {ok:true,id:id}; }
     case 'getTraitements': { const s=await db.collection('traitements').get(); return {ok:true, rows:s.docs.map(function(d){return Object.assign({},d.data(),{TID:d.id});})}; }
@@ -1529,13 +1578,13 @@ async function fb_getFiches(p){
 
 /* ================= PORTAIL : ESPACES + MODULES ================= */
 const VIEWS = {
-  tl:[['fiche','Fiche Production'],['absence','Absence'],['tlmatrice','Matrice'],['sortie','Sortie stock'],['livnew','Bon Livraison']],
+  tl:[['fiche','Fiche Production'],['absence','Absence'],['demandes','Demandes'],['tlmatrice','Matrice'],['sortie','Sortie stock'],['livnew','Bon Livraison']],
   liv:[['livnew','Nouveau bon'],['livreg','Registre'],['trait','Traitement']],
   zone2:[['z2imp','Import tickets'],['z2recep','Réception'],['z2liv','Livraison'],['z2stock','Stock'],['z2art','Articles'],['absence','Absence']]
 };
 const MODULES = {
   prod:  {label:'Gestion Prod',     tabs:[['suivicmd','Suivi Cmd'],['ordre','Ordre de Prod'],['bom','BOM'],['devis','Devis'],['recapprod','Recap Prod'],['etatprod','État Prod'],['histo','Historique'],['kpi','KPI']]},
-  rh:    {label:'Gestion RH',       tabs:[['employes','Employés'],['affect','Affectation'],['postes','Postes'],['matrice','Matrice'],['recap','Recap abs.'],['abshisto','Fiches absence'],['notation','Notation'],['transport','Transport']]},
+  rh:    {label:'Gestion RH',       tabs:[['employes','Employés'],['affect','Affectation'],['postes','Postes'],['matrice','Matrice'],['recap','Recap abs.'],['abshisto','Fiches absence'],['demrh','Demandes'],['notation','Notation'],['transport','Transport']]},
   stock: {label:'Gestion de Stock', tabs:[['stock','Stock'],['entree','Entrée stock'],['sortie','Sortie stock'],['livnew','Bon Livraison'],['livreg','Registre BL'],['etatbl','État BL'],['planliv','Planning Livraison'],['articles','Articles']]},
   trt:   {label:'Traitement',        tabs:[['trait','Fiche traitement'],['etattrait','État Traitement']]},
   config:{label:'Config',           tabs:[['import','Import Excel'],['reglages','Réglages']]}
@@ -1696,6 +1745,9 @@ function onEnter(v){
   if(v==='abshisto') initAbsHisto();
   if(v==='notation') initNotation();
   if(v==='tlmatrice') initTlMatrice();
+  if(v==='demandes') initDemandes();
+  if(v==='absence'){ api('getDemandes',{}).then(function(r){ DEM_ALL=r.rows||[]; renderAbsList(); }).catch(function(){}); }
+  if(v==='demrh') initDemRh();
   if(v==='trait') initTraitement();
   if(v==='recapprod') initRecapProd();
   if(v==='bom') initBom();
@@ -1927,10 +1979,13 @@ function renderAbsList(){
   if(!team.length){ card.style.display='none'; box.innerHTML+=' — aucun employé affecté à cette équipe.'; return; }
   const statuts=S.ref.statuts||['Present','Absence','Conge','Accident','Autorise'];
   const NC=[['prod','Prod',2],['qual','Qual',2],['cons','Cons',1],['sec','Séc',1],['comp','Comp',1],['poste','5S',1]];
+  const dateStr=document.getElementById('aDate').value;
   document.getElementById('aList').innerHTML=team.map(function(e){
-    return '<div class="abs-row" data-id="'+esc(e.ID)+'" data-nom="'+esc(e.Nom)+'"><div class="abs-nm">'+esc(e.Nom)+'<span>'+esc(e.ID)+'</span></div>'
+    const dem=demForDate(e.ID,dateStr); const def=dem?dem.statut:'Present';
+    const info=(dem&&dem.statut==='Autorise'&&dem.h1)?(' <span class="muted" style="font-size:11px">('+dem.h1+(dem.h2?('→'+dem.h2):' sans retour')+')</span>'):'';
+    return '<div class="abs-row" data-id="'+esc(e.ID)+'" data-nom="'+esc(e.Nom)+'"><div class="abs-nm">'+esc(e.Nom)+info+'<span>'+esc(e.ID)+'</span></div>'
       +'<select data-id="'+esc(e.ID)+'" data-nom="'+esc(e.Nom)+'" class="absSel" onchange="absScore(this)">'
-      +statuts.map(function(s){return '<option value="'+s+'">'+s+'</option>';}).join('')+'</select>'
+      +statuts.map(function(s){return '<option value="'+s+'" '+(s===def?'selected':'')+'>'+s+'</option>';}).join('')+'</select>'
       +'<div class="abs-note">'+NC.map(function(c){return '<span class="nc">'+c[1]+'<input type="number" class="n_'+c[0]+'" min="0" max="'+c[2]+'" value="'+c[2]+'" oninput="absScore(this)"></span>';}).join('')
       +'<span class="nc">Pén<input type="number" class="n_pen" min="0" value="0" oninput="absScore(this)"></span>'
       +'<b class="nTot">10</b>/10</div></div>';
@@ -2830,6 +2885,71 @@ function thrEdit(id){ const r=thrFind(id); if(!r)return; THR_EDIT=id;
   thrRenderOps(); window.scrollTo({top:0,behavior:'smooth'}); toast('Modification — change puis Valider','ok'); }
 function thrDelete(id){ if(!id){toast('Fiche sans identifiant','err');return;} const r=thrFind(id); if(!r)return; if(!confirm('Supprimer ce traitement ?'))return;
   api('deleteTraitement',{password:ADMIN_PWD,id:id}).then(function(){ THR_ALL=THR_ALL.filter(function(x){return x.TID!==id;}); renderThrHist(); toast('Supprimé','ok'); }).catch(function(e){toast(e.message,'err');}); }
+
+/* ================= DEMANDES (congé / autorisation) ================= */
+let DEM_ALL=[], DEM_APPROVED=[];
+function dmToggle(){ const t=document.getElementById('dmType').value; document.getElementById('dmConge').style.display=t==='Conge'?'block':'none'; document.getElementById('dmAuto').style.display=t==='Autorisation'?'block':'none'; }
+function dmFillOps(){ const m=metaOfChef(document.getElementById('dmChef').value); const sel=document.getElementById('dmOp');
+  if(!m){ sel.innerHTML='<option value="">—</option>'; return; }
+  const ops=S.emp.filter(function(e){return equipeOf(e.ID)===m.equipe;});
+  sel.innerHTML=ops.length?ops.map(function(e){return '<option value="'+esc(e.ID)+'">'+esc(e.Nom)+'</option>';}).join(''):'<option value="">Aucun opérateur</option>'; }
+function initDemandes(){ const list=chefsOfWeek();
+  document.getElementById('dmChef').innerHTML='<option value="">— chef —</option>'+list.map(function(c){return '<option value="'+esc(chefKey(c))+'">'+esc(c.chef)+' ('+esc(eqLabel(c.equipe))+' · '+esc(shiftLabel(c.shift))+')</option>';}).join('');
+  document.getElementById('dmDu').value=S.today; document.getElementById('dmAu').value=S.today; document.getElementById('dmDate').value=S.today;
+  dmToggle(); dmFillOps(); loadDemList();
+}
+function dmSubmit(){ const m=metaOfChef(document.getElementById('dmChef').value); if(!m){toast('Choisis le chef','err');return;}
+  const opId=document.getElementById('dmOp').value; if(!opId){toast('Choisis l\'opérateur','err');return;}
+  const op=S.emp.find(function(e){return String(e.ID)===String(opId);})||{}; const t=document.getElementById('dmType').value;
+  const rec={Type:t, EmployeID:String(opId), Nom:op.Nom||'', Chef:m.chef, Equipe:m.equipe, Shift:m.shift, Motif:document.getElementById('dmMotif').value.trim(), Statut:'En attente', createdAt:new Date().toISOString()};
+  if(t==='Conge'){ rec.DateDebut=document.getElementById('dmDu').value; rec.DateFin=document.getElementById('dmAu').value; if(!rec.DateDebut||!rec.DateFin){toast('Période requise','err');return;} }
+  else { rec.Date=document.getElementById('dmDate').value; rec.HeureSortie=document.getElementById('dmH1').value; rec.HeureRetour=document.getElementById('dmH2').value; if(!rec.Date||!rec.HeureSortie){toast('Date + heure de sortie requises','err');return;} }
+  api('saveDemande',{password:ADMIN_PWD,rec:rec}).then(function(){ toast('Demande envoyée ✔','ok'); document.getElementById('dmMotif').value=''; loadDemList(); }).catch(function(e){toast(e.message,'err');}); }
+function demLabel(d){ return d.Type==='Conge'?('Congé '+isoD(d.DateDebut)+'→'+isoD(d.DateFin)):('Autorisation '+isoD(d.Date)+' '+(d.HeureSortie||'')+(d.HeureRetour?('→'+d.HeureRetour):' (sans retour)')); }
+function demBadge(s){ const c=s==='Approuvée'?'#2e7d55':(s==='Refusée'?'#b23b32':'#C98A3A'); return '<span style="background:'+c+';color:#fff;padding:2px 8px;border-radius:12px;font-size:11px">'+esc(s)+'</span>'; }
+function loadDemList(){ api('getDemandes',{}).then(function(r){ DEM_ALL=(r.rows||[]).sort(function(a,b){return (a.createdAt||'')<(b.createdAt||'')?1:-1;});
+  document.getElementById('dmList').innerHTML= DEM_ALL.length? '<div class="tbl-wrap"><table><thead><tr><th>Opérateur</th><th>Demande</th><th>Statut</th></tr></thead><tbody>'
+    +DEM_ALL.slice(0,40).map(function(d){return '<tr><td>'+esc(d.Nom)+'</td><td>'+esc(demLabel(d))+'</td><td>'+demBadge(d.Statut)+'</td></tr>';}).join('')+'</tbody></table></div>'
+    : '<div class="empty">Aucune demande.</div>'; }).catch(function(e){ document.getElementById('dmList').innerHTML='<div class="warnbox">'+esc(e.message)+'</div>'; }); }
+
+/* --- Admin --- */
+function initDemRh(){ loadDemRh(); }
+function loadDemRh(){ document.getElementById('drBody').innerHTML='<div class="loading"><span class="spin"></span> …</div>';
+  api('getDemandes',{}).then(function(r){ DEM_ALL=(r.rows||[]).sort(function(a,b){return (a.createdAt||'')<(b.createdAt||'')?1:-1;}); drRender(); }).catch(function(e){ document.getElementById('drBody').innerHTML='<div class="warnbox">'+esc(e.message)+'</div>'; }); }
+function drRender(){ const st=document.getElementById('drStatut').value, ty=document.getElementById('drType').value, q=(document.getElementById('drSearch').value||'').toLowerCase();
+  const rows=DEM_ALL.filter(function(d){ if(st&&d.Statut!==st)return false; if(ty&&d.Type!==ty)return false; if(q&&((d.Nom||'')+' '+(d.Chef||'')).toLowerCase().indexOf(q)<0)return false; return true; });
+  document.getElementById('drBody').innerHTML= rows.length? '<div class="tbl-wrap"><table><thead><tr><th>Date dem.</th><th>Opérateur</th><th>Équipe</th><th>Demande</th><th>Motif</th><th>Statut</th><th></th></tr></thead><tbody>'
+    +rows.map(function(d){ return '<tr><td>'+esc((d.createdAt||'').slice(0,10))+'</td><td>'+esc(d.Nom)+'</td><td>'+esc(eqLabel(d.Equipe))+'</td><td>'+esc(demLabel(d))+'</td><td>'+esc(d.Motif||'')+'</td><td>'+demBadge(d.Statut)+'</td>'
+      +'<td style="white-space:nowrap">'+(d.Statut==='En attente'?'<button class="btn sm" onclick="drApprove(\''+esc(d.DID)+'\')">Approuver</button> <button class="btn sm ghost" onclick="drRefuse(\''+esc(d.DID)+'\')">Refuser</button> ':'<button class="btn sm ghost" onclick="drPdf(\''+esc(d.DID)+'\')">Fiche</button> ')+'<button class="btn link" onclick="drDelete(\''+esc(d.DID)+'\')">✕</button></td></tr>'; }).join('')+'</tbody></table></div>'
+    : '<div class="empty">Aucune demande.</div>';
+}
+function drFind(id){ return DEM_ALL.find(function(x){return x.DID===id;}); }
+function drApprove(id){ const d=drFind(id); if(!d)return; d.Statut='Approuvée'; d.approvedAt=new Date().toISOString();
+  api('saveDemande',{password:ADMIN_PWD,rec:d}).then(function(){ toast('Approuvée ✔ — appliquée au pointage','ok'); drRender(); drPdf(id); }).catch(function(e){toast(e.message,'err');}); }
+function drRefuse(id){ const d=drFind(id); if(!d)return; if(!confirm('Refuser cette demande ?'))return; d.Statut='Refusée';
+  api('saveDemande',{password:ADMIN_PWD,rec:d}).then(function(){ toast('Refusée','ok'); drRender(); }).catch(function(e){toast(e.message,'err');}); }
+function drDelete(id){ const d=drFind(id); if(!d)return; if(!confirm('Supprimer cette demande ?'))return;
+  api('deleteDemande',{password:ADMIN_PWD,id:id}).then(function(){ DEM_ALL=DEM_ALL.filter(function(x){return x.DID!==id;}); drRender(); toast('Supprimée','ok'); }).catch(function(e){toast(e.message,'err');}); }
+function drPdf(id){ const d=drFind(id); if(!d)return; const J=window.jspdf; if(!J||!J.jsPDF){toast('PDF indisponible','err');return;}
+  const doc=new J.jsPDF({unit:'mm',format:'a5',orientation:'landscape'}); doc.setFillColor(22,74,52);doc.rect(0,0,210,16,'F');doc.setTextColor(255);doc.setFont(undefined,'bold');doc.setFontSize(13);
+  doc.text('VALORISE MAROC — '+(d.Type==='Conge'?'DEMANDE DE CONGÉ':'AUTORISATION DE SORTIE'),12,10);
+  doc.setTextColor(20);doc.setFont(undefined,'normal');doc.setFontSize(11); let y=28;
+  doc.text('Opérateur : '+(d.Nom||''),14,y); y+=8; doc.text('Matricule : '+(d.EmployeID||'')+'      Équipe : '+eqLabel(d.Equipe),14,y); y+=8;
+  doc.text('Chef d\'équipe : '+(d.Chef||''),14,y); y+=8;
+  if(d.Type==='Conge'){ doc.text('Période : du '+isoD(d.DateDebut)+' au '+isoD(d.DateFin),14,y); y+=8; }
+  else { doc.text('Date : '+isoD(d.Date)+'    Sortie : '+(d.HeureSortie||'—')+'    Retour : '+(d.HeureRetour||'sans retour'),14,y); y+=8; }
+  if(d.Motif){ doc.text('Motif : '+d.Motif,14,y); y+=8; }
+  doc.text('Statut : '+d.Statut,14,y); y+=14;
+  doc.text('Signature opérateur',16,y+18); doc.rect(14,y,60,16);
+  doc.text('Signature responsable',120,y+18); doc.rect(118,y,70,16);
+  doc.setFontSize(7);doc.setTextColor(140);doc.text(d.DID||'',196,142,{align:'right'});
+  doc.save((d.Type==='Conge'?'Conge_':'Autorisation_')+(d.Nom||'')+'.pdf'); }
+/* application auto au pointage : statut par défaut selon demande approuvée */
+function demForDate(empId, dateStr){ const d=isoD(dateStr); let res=null;
+  DEM_ALL.forEach(function(x){ if(x.Statut!=='Approuvée'||String(x.EmployeID)!==String(empId))return;
+    if(x.Type==='Conge'){ if(d>=isoD(x.DateDebut)&&d<=isoD(x.DateFin)) res={statut:'Conge'}; }
+    else if(x.Type==='Autorisation'){ if(isoD(x.Date)===d) res={statut:'Autorise',h1:x.HeureSortie,h2:x.HeureRetour}; } });
+  return res; }
 
 /* ================= MATRICE TEAM LEADER ================= */
 let TM_ROWS=[];
