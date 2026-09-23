@@ -986,6 +986,23 @@ tr.alert td{background:var(--danger-soft)}
     <datalist id="clientList"></datalist>
   </section>
 
+  <!-- ============ CONTRATS STANDING (admin) ============ -->
+  <section class="view" data-view="contrat">
+    <div class="vhead"><div class="eyebrow">Client</div><h2>Contrats — commande récurrente</h2>
+      <p>Définis une fois la Qté/semaine par client &amp; référence. Elle s'applique automatiquement chaque semaine (modifiable ponctuellement dans Suivi Cmd).</p></div>
+    <div class="admin-body" data-admin="contrat">
+      <div class="card">
+        <div class="grid g2" style="margin-bottom:10px">
+          <div class="field"><label>Client</label><select id="ctClient" onchange="ctRender()"><option value="">— choisir —</option></select></div>
+          <div class="field" style="align-self:end"><button class="btn ghost sm" onclick="loadContrat()">Actualiser</button></div>
+        </div>
+        <div id="ctBody"><div class="empty">Choisis un client.</div></div>
+        <button class="btn" style="width:100%;margin-top:10px" onclick="ctSave()">Enregistrer le contrat</button>
+      </div>
+      <div class="card"><h3>Récapitulatif des contrats</h3><div id="ctRecap"></div></div>
+    </div>
+  </section>
+
   <!-- ============ SUIVI COMMANDES (simple, 1 client) ============ -->
   <section class="view" data-view="suivicmd">
     <div class="vhead"><div class="eyebrow">Client</div><h2>État suivi commandes</h2>
@@ -1177,7 +1194,7 @@ tr.alert td{background:var(--danger-soft)}
   </section>
 </main>
 
-<div class="foot">Valorise — outil interne · <b>version 7.5-SUPABASE · 03-01 · demandes conge/autorisation</b> · <span id="userTag2"></span></div>
+<div class="foot">Valorise — outil interne · <b>version 7.6-SUPABASE · 03-01 · contrats standing</b> · <span id="userTag2"></span></div>
 </div><!-- /appWrap -->
 <div class="toast" id="toast"></div>
 
@@ -1266,7 +1283,7 @@ async function sbForgot(){ const em=document.getElementById('lgEmail').value.tri
   if(!em){ msg.textContent='Saisis ton email d\'abord'; return; }
   const {error}=await SB.auth.resetPasswordForEmail(em); msg.textContent=error?('Erreur : '+error.message):'Email de réinitialisation envoyé ✔ (vérifie ta boîte)'; }
 async function sbLogout(){ await SB.auth.signOut(); location.reload(); }
-const WRITE=['saveEmploye','deleteEmploye','saveAffectation','savePlanning','saveAbsence','saveArticle','deleteArticle','saveEntree','saveSortie','saveCommande','saveOrdreProd','saveFiche','deleteFiche','savePoste','deletePoste','saveBom','deleteBom','saveQuotation','setAdminPassword','saveLivraison','savePlanLiv','setBlNext','importLivraisons','updateLivraison','deleteLivraison','clearLivraisons','deleteLivBulk','deleteFicheAbsence','saveTraitement','deleteTraitement','saveCommandesSemaine','saveZ2Mouv','deleteZ2Mouv','saveZ2Article','deleteZ2Article','importZ2','clearZ2','saveNoteTL','saveDemande','deleteDemande'];
+const WRITE=['saveEmploye','deleteEmploye','saveAffectation','savePlanning','saveAbsence','saveArticle','deleteArticle','saveEntree','saveSortie','saveCommande','saveOrdreProd','saveFiche','deleteFiche','savePoste','deletePoste','saveBom','deleteBom','saveQuotation','setAdminPassword','saveLivraison','savePlanLiv','setBlNext','importLivraisons','updateLivraison','deleteLivraison','clearLivraisons','deleteLivBulk','deleteFicheAbsence','saveTraitement','deleteTraitement','saveCommandesSemaine','saveZ2Mouv','deleteZ2Mouv','saveZ2Article','deleteZ2Article','importZ2','clearZ2','saveNoteTL','saveDemande','deleteDemande','saveContrat'];
 
 async function fb_importLivraisons(p){ const docs=p.docs||[];
   for(var i=0;i<docs.length;i+=400){ const batch=db.batch();
@@ -1336,6 +1353,8 @@ async function route(action,p){
     case 'saveNoteTL':     { const id=p.rec.NID; await db.collection('notesTL').doc(id).set(Object.assign({},p.rec,{NID:id})); return {ok:true}; }
     case 'getNotesTL':     { const s=await db.collection('notesTL').get(); return {ok:true, rows:s.docs.map(function(d){return d.data();})}; }
     case 'getCommandesSemaine':  { const d=await db.collection('commandesSemaine').doc(String(p.week)).get(); return {ok:true, data:(d.exists?d.data():null)}; }
+    case 'getContrat':     { const d=await db.collection('contrats').doc('standing').get(); return {ok:true, data:(d.exists?d.data():null)}; }
+    case 'saveContrat':    await db.collection('contrats').doc('standing').set({data:p.data||{}}); return {ok:true};
     case 'saveCommandesSemaine': await db.collection('commandesSemaine').doc(String(p.week)).set({week:String(p.week),annee:p.annee,semaine:p.semaine,data:p.data||{},reste:p.reste||{},clients:p.clients||[]}); return {ok:true};
     case 'saveArticle':    return await fb_saveArticle(p);
     case 'deleteArticle':  await db.collection('articles').doc(String(p.ref)).delete(); return {ok:true};
@@ -1583,7 +1602,7 @@ const VIEWS = {
   zone2:[['z2imp','Import tickets'],['z2recep','Réception'],['z2liv','Livraison'],['z2stock','Stock'],['z2art','Articles'],['absence','Absence']]
 };
 const MODULES = {
-  prod:  {label:'Gestion Prod',     tabs:[['suivicmd','Suivi Cmd'],['ordre','Ordre de Prod'],['bom','BOM'],['devis','Devis'],['recapprod','Recap Prod'],['etatprod','État Prod'],['histo','Historique'],['kpi','KPI']]},
+  prod:  {label:'Gestion Prod',     tabs:[['contrat','Contrats'],['suivicmd','Suivi Cmd'],['ordre','Ordre de Prod'],['bom','BOM'],['devis','Devis'],['recapprod','Recap Prod'],['etatprod','État Prod'],['histo','Historique'],['kpi','KPI']]},
   rh:    {label:'Gestion RH',       tabs:[['employes','Employés'],['affect','Affectation'],['postes','Postes'],['matrice','Matrice'],['recap','Recap abs.'],['abshisto','Fiches absence'],['demrh','Demandes'],['notation','Notation'],['transport','Transport']]},
   stock: {label:'Gestion de Stock', tabs:[['stock','Stock'],['entree','Entrée stock'],['sortie','Sortie stock'],['livnew','Bon Livraison'],['livreg','Registre BL'],['etatbl','État BL'],['planliv','Planning Livraison'],['articles','Articles']]},
   trt:   {label:'Traitement',        tabs:[['trait','Fiche traitement'],['etattrait','État Traitement']]},
@@ -1727,6 +1746,7 @@ function onEnter(v){
   if(v==='affect') renderAffect();
   if(v==='commandes') initCommandes();
   if(v==='suivicmd') initSuivi();
+  if(v==='contrat') initContrat();
   if(v==='entree') { if(!document.getElementById('inLines').children.length) addEntreeLine(); }
   if(v==='sortie') { fillSoList(); if(!document.getElementById('soLines').children.length) addSortieLine(); }
   if(v==='livnew') initLivraison();
@@ -2238,20 +2258,45 @@ function saveEntree(){
     }).catch(function(err){toast(err.message,'err');});
 }
 
+/* ================= CONTRATS STANDING ================= */
+let STANDING={};
+function loadContrat(cb){ api('getContrat',{}).then(function(r){ STANDING=(r.data&&r.data.data)||{}; if(cb)cb(); else { ctFillClients(); ctRender(); ctRecap(); } }).catch(function(e){ if(!cb)document.getElementById('ctBody').innerHTML='<div class="warnbox">'+esc(e.message)+'</div>'; }); }
+function ctFillClients(){ const sel=document.getElementById('ctClient'); const cur=sel.value; const list=Array.from(new Set((ALL_CLIENTS||[]).concat(S.clients||[]).concat(Object.keys(STANDING)).filter(Boolean))).sort();
+  sel.innerHTML='<option value="">— choisir —</option>'+list.map(function(c){return '<option>'+esc(c)+'</option>';}).join(''); sel.value=cur; }
+function initContrat(){ coBuildRefs(); loadAllClients(function(){ loadContrat(function(){ ctFillClients(); ctRender(); ctRecap(); }); }); }
+function ctRender(){ const cl=document.getElementById('ctClient').value; if(!cl){ document.getElementById('ctBody').innerHTML='<div class="empty">Choisis un client.</div>'; return; }
+  const st=STANDING[cl]||{};
+  let h='<div class="tbl-wrap"><table><thead><tr><th>Réf</th><th>Mesure</th><th>Type</th><th>Qté / semaine</th></tr></thead><tbody>';
+  CO_REFS.forEach(function(r){ h+='<tr data-ref="'+esc(r.ref)+'"><td><b>'+esc(r.ref)+'</b></td><td>'+esc(r.mesure)+'</td><td>'+esc(r.type)+'</td><td><input type="number" class="ctQ" min="0" value="'+(st[r.ref]||'')+'" style="width:80px"></td></tr>'; });
+  h+='</tbody></table></div>';
+  document.getElementById('ctBody').innerHTML=h;
+}
+function ctSave(){ const cl=document.getElementById('ctClient').value; if(!cl){toast('Choisis un client','err');return;}
+  const obj={}; [].forEach.call(document.querySelectorAll('#ctBody tr[data-ref]'),function(tr){ const q=Number(tr.querySelector('.ctQ').value||0); if(q)obj[tr.dataset.ref]=q; });
+  if(Object.keys(obj).length) STANDING[cl]=obj; else delete STANDING[cl];
+  api('saveContrat',{password:ADMIN_PWD,data:STANDING}).then(function(){ toast('Contrat enregistré ✔','ok'); ctRecap(); }).catch(function(e){toast(e.message,'err');}); }
+function ctRecap(){ const clients=Object.keys(STANDING).sort();
+  document.getElementById('ctRecap').innerHTML= clients.length? '<div class="tbl-wrap"><table><thead><tr><th>Client</th><th>Réfs</th><th>Total / semaine</th></tr></thead><tbody>'
+    +clients.map(function(c){ const refs=Object.keys(STANDING[c]); const tot=refs.reduce(function(s,k){return s+Number(STANDING[c][k]||0);},0); return '<tr><td>'+esc(c)+'</td><td>'+refs.length+'</td><td><b>'+tot+'</b></td></tr>'; }).join('')+'</tbody></table></div>'
+    : '<div class="empty">Aucun contrat défini.</div>'; }
+
 /* ================= SUIVI COMMANDES (état auto) ================= */
 let SC_DATA={}, SC_RETARD={}, SC_LIV={}, SC_CLIENTS=[];
 function initSuivi(){ coBuildRefs(); document.getElementById('scAnnee').value=S.week.annee; document.getElementById('scSemaine').value=S.week.semaine; loadAllClients(function(){}); scLoad(); }
 function scWeek(){ return document.getElementById('scAnnee').value+'-'+document.getElementById('scSemaine').value; }
 function scRefCode(s){ return String(s||'').split(/\s+[—\u2014]\s+/)[0].trim(); }
-function scGet(ref,cl){ return (SC_DATA[ref]&&SC_DATA[ref][cl])||{q:0}; }
+function scGet(ref,cl){ return (SC_DATA[ref]&&SC_DATA[ref][cl])||{q:null}; }
+function scStandQ(ref,cl){ return Number((STANDING[cl]&&STANDING[cl][ref])||0); }
+function scEffQ(ref,cl){ const o=SC_DATA[ref]&&SC_DATA[ref][cl]; return (o&&o.q!=null&&o.q!=='')?Number(o.q):scStandQ(ref,cl); }
+function scIsOverride(ref,cl){ const o=SC_DATA[ref]&&SC_DATA[ref][cl]; return !!(o&&o.q!=null&&o.q!==''); }
 function scRet(ref,cl){ return Number((SC_RETARD[ref]&&SC_RETARD[ref][cl])||0); }
 function scLivOf(ref,cl){ return Number((SC_LIV[ref]&&SC_LIV[ref][cl])||0); }
 function scLoad(){ const an=Number(document.getElementById('scAnnee').value), sem=Number(document.getElementById('scSemaine').value); let pa=an,ps=sem-1; if(ps<1){pa=an-1;ps=52;}
   document.getElementById('scEtat').innerHTML='<div class="loading"><span class="spin"></span> …</div>';
   const ws=weekToDate(an,sem); const we=new Date(new Date(ws).getTime()+6*864e5).toISOString().slice(0,10);
   const refByCode={}; CO_REFS.forEach(function(r){ refByCode[norm(scRefCode(r.ref))]=r.ref; });
-  Promise.all([api('getCommandesSemaine',{week:an+'-'+sem}),api('getCommandesSemaine',{week:pa+'-'+ps}),api('getLivraisons',{})]).then(function(res){
-    const d=res[0].data, prev=res[1].data; SC_DATA=(d&&d.data)||{}; SC_RETARD=(prev&&prev.reste)||{};
+  Promise.all([api('getCommandesSemaine',{week:an+'-'+sem}),api('getCommandesSemaine',{week:pa+'-'+ps}),api('getLivraisons',{}),api('getContrat',{})]).then(function(res){
+    const d=res[0].data, prev=res[1].data; SC_DATA=(d&&d.data)||{}; SC_RETARD=(prev&&prev.reste)||{}; STANDING=(res[3].data&&res[3].data.data)||{};
     // Livré AUTO depuis les BL de la semaine
     SC_LIV={}; (res[2].rows||[]).forEach(function(b){ const dt=isoD(b.Date); if(dt<ws||dt>we)return; const cl=b.Client||''; 
       (b.lignes||[]).forEach(function(ln){ const code=scRefCode(ln.ref||ln.Ref||''); if(!code)return; const q=Number(ln.qte||ln.Qte||0); if(!q)return;
@@ -2262,7 +2307,7 @@ function scLoad(){ const an=Number(document.getElementById('scAnnee').value), se
   }).catch(function(e){ document.getElementById('scEtat').innerHTML='<div class="warnbox">'+esc(e.message)+'</div>'; });
 }
 /* liste des réfs concernées pour un client (commande OU livré OU retard) */
-function scRefsClient(cl){ const seen={}, out=[]; CO_REFS.forEach(function(r){ if(scGet(r.ref,cl).q||scLivOf(r.ref,cl)||scRet(r.ref,cl)){ seen[r.ref]=1; out.push({ref:r.ref,mesure:r.mesure}); } });
+function scRefsClient(cl){ const seen={}, out=[]; CO_REFS.forEach(function(r){ if(scEffQ(r.ref,cl)||scLivOf(r.ref,cl)||scRet(r.ref,cl)){ seen[r.ref]=1; out.push({ref:r.ref,mesure:r.mesure}); } });
   [SC_DATA,SC_LIV,SC_RETARD].forEach(function(src){ Object.keys(src).forEach(function(ref){ if(src[ref]&&src[ref][cl]&&!seen[ref]){ seen[ref]=1; const a=CO_REFS.find(function(x){return x.ref===ref;}); out.push({ref:ref,mesure:a?a.mesure:''}); } }); });
   return out; }
 /* SAISIE commande pour le client sélectionné */
@@ -2271,7 +2316,7 @@ function scRender(){ const cl=document.getElementById('scClient').value;
   const entry=document.getElementById('scEntry');
   if(cl){ const refs=CO_REFS;
     let h='<div class="card"><h3>Saisie commande — '+esc(cl)+'</h3><div class="tbl-wrap"><table><thead><tr><th>Réf</th><th>Mesure</th><th>Retard</th><th>Commandé</th><th>Livré (auto)</th><th>Reste</th></tr></thead><tbody>';
-    refs.forEach(function(r){ const q=Number(scGet(r.ref,cl).q||0); const ret=scRet(r.ref,cl); const liv=scLivOf(r.ref,cl); const reste=ret+q-liv;
+    refs.forEach(function(r){ const q=scEffQ(r.ref,cl); const ret=scRet(r.ref,cl); const liv=scLivOf(r.ref,cl); const reste=ret+q-liv;
       h+='<tr data-ref="'+esc(r.ref)+'"><td><b>'+esc(r.ref)+'</b></td><td>'+esc(r.mesure)+'</td><td class="scRet">'+(ret||'')+'</td>'
         +'<td><input type="number" class="scQ" min="0" value="'+(q||'')+'" oninput="scRecalc(this)" style="width:70px"></td>'
         +'<td>'+(liv||'')+'</td><td class="scR'+(reste>0?' late':'')+'">'+reste+'</td></tr>'; });
@@ -2289,14 +2334,14 @@ function scSave(){ const cl=document.getElementById('scClient').value; if(!cl){t
   // reste stocké = retard + commandé - livré(auto)
   const reste={}; const refsAll={}; Object.keys(SC_DATA).forEach(function(r){refsAll[r]=1;}); Object.keys(SC_LIV).forEach(function(r){refsAll[r]=1;}); Object.keys(SC_RETARD).forEach(function(r){refsAll[r]=1;});
   Object.keys(refsAll).forEach(function(ref){ const cls={}; [SC_DATA,SC_LIV,SC_RETARD].forEach(function(src){ if(src[ref])Object.keys(src[ref]).forEach(function(c){cls[c]=1;}); });
-    Object.keys(cls).forEach(function(c){ const v=scRet(ref,c)+Number(scGet(ref,c).q||0)-scLivOf(ref,c); if(v){(reste[ref]=reste[ref]||{})[c]=v;} }); });
+    Object.keys(cls).forEach(function(c){ const v=scRet(ref,c)+scEffQ(ref,c)-scLivOf(ref,c); if(v){(reste[ref]=reste[ref]||{})[c]=v;} }); });
   const clients=Array.from(new Set(SC_CLIENTS.concat([cl])));
   api('saveCommandesSemaine',{password:ADMIN_PWD,week:scWeek(),annee:Number(document.getElementById('scAnnee').value),semaine:Number(document.getElementById('scSemaine').value),data:SC_DATA,reste:reste,clients:clients}).then(function(){ toast('Commande enregistrée ✔','ok'); scEtat(); scProd(); }).catch(function(e){toast(e.message,'err');}); }
 /* GRAND TABLEAU état — tous les clients (ou filtré) */
 function scEtatRows(){ const filt=document.getElementById('scClient').value;
   const clients=filt?[filt]:SC_CLIENTS; const out=[];
   clients.forEach(function(cl){ const refs=scRefsClient(cl); if(!refs.length)return; let sc=0,sl=0,sr=0,sret=0;
-    refs.forEach(function(r){ const q=Number(scGet(r.ref,cl).q||0), liv=scLivOf(r.ref,cl), ret=scRet(r.ref,cl), reste=ret+q-liv;
+    refs.forEach(function(r){ const q=scEffQ(r.ref,cl), liv=scLivOf(r.ref,cl), ret=scRet(r.ref,cl), reste=ret+q-liv;
       out.push({client:cl,ref:r.ref,mesure:r.mesure,ret:ret,cmd:q,liv:liv,reste:reste,sub:false}); sc+=q;sl+=liv;sr+=reste;sret+=ret; });
     out.push({client:cl,ref:'TOTAL '+cl,mesure:'',ret:sret,cmd:sc,liv:sl,reste:sr,sub:true}); });
   return out; }
@@ -2311,7 +2356,7 @@ function scEtat(){ scGatherEntry(); const rows=scEtatRows();
   document.getElementById('scEtat').innerHTML=h;
 }
 function scProdData(){ const need={}; CO_REFS.forEach(function(r){ let s=0; const cls={}; [SC_DATA,SC_LIV,SC_RETARD].forEach(function(src){ if(src[r.ref])Object.keys(src[r.ref]).forEach(function(c){cls[c]=1;}); });
-    Object.keys(cls).forEach(function(c){ const reste=scRet(r.ref,c)+Number(scGet(r.ref,c).q||0)-scLivOf(r.ref,c); if(reste>0)s+=reste; }); if(s>0)need[r.ref]={ref:r.ref,mesure:r.mesure,type:r.type,qte:s}; });
+    Object.keys(cls).forEach(function(c){ const reste=scRet(r.ref,c)+scEffQ(r.ref,c)-scLivOf(r.ref,c); if(reste>0)s+=reste; }); if(s>0)need[r.ref]={ref:r.ref,mesure:r.mesure,type:r.type,qte:s}; });
   return Object.keys(need).map(function(k){return need[k];}); }
 function scProd(){ const rows=scProdData();
   document.getElementById('scProd').innerHTML= rows.length? '<div class="tbl-wrap"><table><thead><tr><th>Réf</th><th>Mesure</th><th>Type</th><th>À produire</th></tr></thead><tbody>'
