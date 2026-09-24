@@ -1194,7 +1194,7 @@ tr.alert td{background:var(--danger-soft)}
   </section>
 </main>
 
-<div class="foot">Valorise — outil interne · <b>version 7.9-SUPABASE · 03-01 · BL ref elargie</b> · <span id="userTag2"></span></div>
+<div class="foot">Valorise — outil interne · <b>version 8.0-SUPABASE · 03-01 · mapping FE + livré</b> · <span id="userTag2"></span></div>
 </div><!-- /appWrap -->
 <div class="toast" id="toast"></div>
 
@@ -2302,13 +2302,13 @@ function scLivOf(ref,cl){ return Number((SC_LIV[ref]&&SC_LIV[ref][cl])||0); }
 function scLoad(){ const an=Number(document.getElementById('scAnnee').value), sem=Number(document.getElementById('scSemaine').value); let pa=an,ps=sem-1; if(ps<1){pa=an-1;ps=52;}
   document.getElementById('scEtat').innerHTML='<div class="loading"><span class="spin"></span> …</div>';
   const ws=weekToDate(an,sem); const we=new Date(new Date(ws).getTime()+6*864e5).toISOString().slice(0,10);
-  const refByCode={}; CO_REFS.forEach(function(r){ refByCode[norm(scRefCode(r.ref))]=r.ref; });
+  const refByCode={}; CO_REFS.forEach(function(r){ refByCode[norm(scRefCode(r.ref))]=r.ref; }); const ARTKEY=buildArtKey();
   Promise.all([api('getCommandesSemaine',{week:an+'-'+sem}),api('getCommandesSemaine',{week:pa+'-'+ps}),api('getLivraisons',{}),api('getContrat',{})]).then(function(res){
     const d=res[0].data, prev=res[1].data; SC_DATA=(d&&d.data)||{}; SC_RETARD=(prev&&prev.reste)||{}; STANDING=(res[3].data&&res[3].data.data)||{};
     // Livré AUTO depuis les BL de la semaine
     SC_LIV={}; (res[2].rows||[]).forEach(function(b){ const dt=isoD(b.Date); if(dt<ws||dt>we)return; const cl=b.Client||''; 
-      (b.lignes||[]).forEach(function(ln){ const code=scRefCode(ln.ref||ln.Ref||''); if(!code)return; const q=Number(ln.qte||ln.Qte||0); if(!q)return;
-        const ref=refByCode[norm(code)]||code; (SC_LIV[ref]=SC_LIV[ref]||{}); SC_LIV[ref][cl]=(SC_LIV[ref][cl]||0)+q; }); });
+      (b.lignes||[]).forEach(function(ln){ const raw=ln.ref||ln.Ref||''; const code=scRefCode(raw); if(!code)return; const q=Number(ln.qte||ln.Qte||0); if(!q)return;
+        const ref=ARTKEY[norm(code)]||ARTKEY[norm(raw)]||refByCode[norm(code)]||code; (SC_LIV[ref]=SC_LIV[ref]||{}); SC_LIV[ref][cl]=(SC_LIV[ref][cl]||0)+q; }); });
     const saved=(d&&d.clients)||[]; SC_CLIENTS=Array.from(new Set(saved.concat(ALL_CLIENTS||[]).concat(S.clients||[]).filter(Boolean))).sort();
     const sel=document.getElementById('scClient'); const cur=sel.value; sel.innerHTML='<option value="">Tous les clients</option>'+SC_CLIENTS.map(function(c){return '<option>'+esc(c)+'</option>';}).join(''); sel.value=cur;
     scRender();
@@ -2395,7 +2395,10 @@ function scPdf(){ const J=window.jspdf; if(!J||!J.jsPDF){toast('PDF indisponible
 /* ================= COMMANDES & SUIVI (style G CMD PAL) ================= */
 /* CO_DATA = { ref: { client: {q:qte, l:livrer} } } ; CO_RETARD = { ref:{client:reste_semaine_precedente} } */
 let CO_DATA={}, CO_CLIENTS=[], CO_REFS=[], CO_RETARD={};
-function coMesFrom(a){ if(a.Mesure) return a.Mesure; const d=a.Designation||''; const m=d.match(/\d{2,4}\s*[x*×]\s*\d{2,4}(\s*[x*×]\s*\d{1,4})?/i); return m?m[0].replace(/\s+/g,''):d; }
+function livDesigKey(s){ return norm(s).replace(/^(palettes?|couvercles?|covers?|pallets?)\s+/,'').replace(/\s+/g,' ').trim(); }
+function livMesLabel(a){ const d=String(a.Designation||''); const k=d.replace(/^(palette|couvercle|cover|pallet)s?\s+/i,'').trim(); if(k)return k; if(a.Mesure)return a.Mesure; const m=d.match(/\d{2,4}\s*[x*×]\s*\d{2,4}/i); return m?m[0].replace(/\s+/g,''):''; }
+function buildArtKey(){ const K={}; (S.art||[]).forEach(function(a){ if(!a.Ref)return; [norm(a.Ref),norm(a.Designation),livDesigKey(a.Designation),norm(a.Mesure),livDesigKey(a.Mesure)].forEach(function(k){ if(k&&!K[k])K[k]=a.Ref; }); }); return K; }
+function coMesFrom(a){ return livMesLabel(a); }
 function coType(a){ if(a.TypePalette) return a.TypePalette; const r=String(a.Ref||''); if(/-01-/.test(r))return 'PALLET NEUF'; if(/-0?2-/.test(r))return 'COUVERCLE'; if(/-03-/.test(r))return 'PALLET RECYCLER'; return a.Famille||''; }
 function coBuildRefs(){ CO_REFS=S.art.filter(isPF).map(function(a){ return {ref:a.Ref, mesure:coMesFrom(a), type:coType(a)}; })
   .sort(function(a,b){ return String(a.ref)<String(b.ref)?-1:1; }); }
@@ -3501,7 +3504,7 @@ function makeCombo(input, items, strict){
   list.addEventListener('mousedown',function(e){ const o=e.target.closest('.combo-opt'); if(!o||o.classList.contains('combo-empty'))return; e.preventDefault(); input.value=o.textContent; close(); livRecalc(); });
 }
 function livIsBL(a){ const f=norm(a.Famille); if(/matiere|premiere|consom|clou|agrafe|\bvis\b|colle/.test(f)) return false; return isPF(a) || !!a.TypePalette || !!a.Mesure || /^va\d/i.test(String(a.Ref||'')); }
-function livBuildRefs(){ LIV_REFS=S.art.filter(livIsBL).map(function(a){ const m=a.Mesure||coMesFrom(a); return a.Ref+(m?(' \u2014 '+m):''); }).sort(); }
+function livBuildRefs(){ LIV_REFS=S.art.filter(livIsBL).map(function(a){ const m=livMesLabel(a); return a.Ref+(m?(' \u2014 '+m):''); }).sort(); }
 let ALL_CLIENTS=null;
 function loadAllClients(cb){ if(ALL_CLIENTS){ cb(ALL_CLIENTS); return; }
   api('getLivraisons',{}).then(function(r){ const s={}; (S.clients||[]).forEach(function(c){ if(c)s[c]=1; });
