@@ -1194,7 +1194,7 @@ tr.alert td{background:var(--danger-soft)}
   </section>
 </main>
 
-<div class="foot">Valorise — outil interne · <b>version 7.7-SUPABASE · 03-01 · BL ref stricte</b> · <span id="userTag2"></span></div>
+<div class="foot">Valorise — outil interne · <b>version 7.8-SUPABASE · 03-01 · freq/retard/heures/matricule</b> · <span id="userTag2"></span></div>
 </div><!-- /appWrap -->
 <div class="toast" id="toast"></div>
 
@@ -1439,7 +1439,7 @@ async function fb_saveAbsence(p){
   const batch=db.batch();
   q.docs.forEach(function(d){ batch.delete(d.ref); });
   (p.lignes||[]).forEach(function(l){ batch.set(db.collection('absences').doc(),
-    {Date:date,EmployeID:String(l.id),Nom:l.nom,Equipe:p.equipe,Statut:l.statut}); });
+    {Date:date,EmployeID:String(l.id),Nom:l.nom,Equipe:p.equipe,Statut:l.statut,HeureSortie:l.h1||'',HeureRetour:l.h2||''}); });
   const absents=(p.lignes||[]).filter(function(l){return !/present|présent/i.test(l.statut||'');}).length;
   const fid=date+'-'+String(p.equipe||'').replace(/[^\w-]/g,'');
   batch.set(db.collection('fichesAbsence').doc(fid),{FID:fid,Date:date,Equipe:p.equipe||'',Chef:p.chef||'',Shift:String(p.shift||''),
@@ -2019,9 +2019,10 @@ function absRowScore(row){ const st=row.querySelector('.absSel').value; const pr
 function absScore(el){ const row=el.closest('.abs-row'); const sc=absRowScore(row); row.querySelector('.nTot').textContent=sc.total; }
 function absCurrent(){
   const m=metaOfChef(document.getElementById('aChef').value);
-  const lignes=[].map.call(document.querySelectorAll('.absSel'),function(s){ return {id:s.dataset.id,nom:s.dataset.nom,statut:s.value}; });
+  const lignes=[].map.call(document.querySelectorAll('.absSel'),function(s){ const row=s.closest('.abs-row'); const o={id:s.dataset.id,nom:s.dataset.nom,statut:s.value}; if(s.value==='Autorise'&&row&&(row.dataset.h1||row.dataset.h2)){ o.h1=row.dataset.h1||''; o.h2=row.dataset.h2||''; } return o; });
   return {date:document.getElementById('aDate').value, equipe:m?m.equipe:'', shift:m?m.shift:'', chef:m?m.chef:'', lignes:lignes};
 }
+function absStatutLabel(l){ return l.statut + ((l.statut==='Autorise'&&l.h1)?(' '+l.h1+'→'+(l.h2||'—')):''); }
 function absPdfDoc(){
   const a=absCurrent(); if(!a.lignes.length){ toast('Rien à exporter','err'); return null; }
   const J=window.jspdf; if(!J||!J.jsPDF){ toast('PDF indisponible','err'); return null; }
@@ -2029,7 +2030,7 @@ function absPdfDoc(){
   doc.setTextColor(255); doc.setFont(undefined,'bold'); doc.setFontSize(15); doc.text('VALORISE — Absences',14,12);
   doc.setTextColor(25); doc.setFont(undefined,'normal'); doc.setFontSize(10);
   doc.text('Date : '+a.date+'   Équipe : '+a.equipe+'   Shift : '+a.shift+'   Chef : '+a.chef,14,26);
-  doc.autoTable({startY:31,head:[['ID','Nom','Statut']],body:a.lignes.map(function(l){return [l.id,l.nom,l.statut];}),styles:{fontSize:9},headStyles:{fillColor:[46,125,85]},
+  doc.autoTable({startY:31,head:[['Matricule','Nom','Statut']],body:a.lignes.map(function(l){return [l.id,l.nom,absStatutLabel(l)];}),styles:{fontSize:9},headStyles:{fillColor:[46,125,85]},
     didParseCell:function(dd){ if(dd.section==='body' && dd.column.index===2 && !/present|présent/i.test(String(dd.cell.raw))) dd.cell.styles.textColor=[178,59,50]; }});
   return {blob:doc.output('blob'),fileName:'Absences_'+a.equipe+'_'+a.date+'.pdf'};
 }
@@ -2046,6 +2047,7 @@ async function doSaveAbsence(){
   const noteOn=document.getElementById('aNoteOn') && document.getElementById('aNoteOn').checked;
   const lignes=[].map.call(document.querySelectorAll('#aList .abs-row'),function(row){
     const sel=row.querySelector('.absSel'); const o={id:row.dataset.id,nom:row.dataset.nom,statut:sel.value};
+    if(sel.value==='Autorise'&&(row.dataset.h1||row.dataset.h2)){ o.h1=row.dataset.h1||''; o.h2=row.dataset.h2||''; }
     if(noteOn){ const sc=absRowScore(row); o.note={pres:sc.pres, total:sc.total,
       prod:Number(row.querySelector('.n_prod').value||0), qual:Number(row.querySelector('.n_qual').value||0), cons:Number(row.querySelector('.n_cons').value||0),
       sec:Number(row.querySelector('.n_sec').value||0), comp:Number(row.querySelector('.n_comp').value||0), poste:Number(row.querySelector('.n_poste').value||0), pen:Number(row.querySelector('.n_pen').value||0)}; }
@@ -2973,7 +2975,7 @@ function demLabel(d){ return d.Type==='Conge'?('Congé '+isoD(d.DateDebut)+'→'
 function demBadge(s){ const c=s==='Approuvée'?'#2e7d55':(s==='Refusée'?'#b23b32':'#C98A3A'); return '<span style="background:'+c+';color:#fff;padding:2px 8px;border-radius:12px;font-size:11px">'+esc(s)+'</span>'; }
 function loadDemList(){ api('getDemandes',{}).then(function(r){ DEM_ALL=(r.rows||[]).sort(function(a,b){return (a.createdAt||'')<(b.createdAt||'')?1:-1;});
   document.getElementById('dmList').innerHTML= DEM_ALL.length? '<div class="tbl-wrap"><table><thead><tr><th>Opérateur</th><th>Demande</th><th>Statut</th></tr></thead><tbody>'
-    +DEM_ALL.slice(0,40).map(function(d){return '<tr><td>'+esc(d.Nom)+'</td><td>'+esc(demLabel(d))+'</td><td>'+demBadge(d.Statut)+'</td></tr>';}).join('')+'</tbody></table></div>'
+    +DEM_ALL.slice(0,40).map(function(d){return '<tr><td>'+esc(d.EmployeID||'')+' — '+esc(d.Nom)+'</td><td>'+esc(demLabel(d))+'</td><td>'+demBadge(d.Statut)+'</td></tr>';}).join('')+'</tbody></table></div>'
     : '<div class="empty">Aucune demande.</div>'; }).catch(function(e){ document.getElementById('dmList').innerHTML='<div class="warnbox">'+esc(e.message)+'</div>'; }); }
 
 /* --- Admin --- */
@@ -2983,7 +2985,7 @@ function loadDemRh(){ document.getElementById('drBody').innerHTML='<div class="l
 function drRender(){ const st=document.getElementById('drStatut').value, ty=document.getElementById('drType').value, q=(document.getElementById('drSearch').value||'').toLowerCase();
   const rows=DEM_ALL.filter(function(d){ if(st&&d.Statut!==st)return false; if(ty&&d.Type!==ty)return false; if(q&&((d.Nom||'')+' '+(d.Chef||'')).toLowerCase().indexOf(q)<0)return false; return true; });
   document.getElementById('drBody').innerHTML= rows.length? '<div class="tbl-wrap"><table><thead><tr><th>Date dem.</th><th>Opérateur</th><th>Équipe</th><th>Demande</th><th>Motif</th><th>Statut</th><th></th></tr></thead><tbody>'
-    +rows.map(function(d){ return '<tr><td>'+esc((d.createdAt||'').slice(0,10))+'</td><td>'+esc(d.Nom)+'</td><td>'+esc(eqLabel(d.Equipe))+'</td><td>'+esc(demLabel(d))+'</td><td>'+esc(d.Motif||'')+'</td><td>'+demBadge(d.Statut)+'</td>'
+    +rows.map(function(d){ return '<tr><td>'+esc((d.createdAt||'').slice(0,10))+'</td><td>'+esc(d.EmployeID||'')+' — '+esc(d.Nom)+'</td><td>'+esc(eqLabel(d.Equipe))+'</td><td>'+esc(demLabel(d))+'</td><td>'+esc(d.Motif||'')+'</td><td>'+demBadge(d.Statut)+'</td>'
       +'<td style="white-space:nowrap">'+(d.Statut==='En attente'?'<button class="btn sm" onclick="drApprove(\''+esc(d.DID)+'\')">Approuver</button> <button class="btn sm ghost" onclick="drRefuse(\''+esc(d.DID)+'\')">Refuser</button> ':'<button class="btn sm ghost" onclick="drPdf(\''+esc(d.DID)+'\')">Fiche</button> ')+'<button class="btn link" onclick="drDelete(\''+esc(d.DID)+'\')">✕</button></td></tr>'; }).join('')+'</tbody></table></div>'
     : '<div class="empty">Aucune demande.</div>';
 }
@@ -3348,7 +3350,7 @@ function ahPdf(fid){ const f=ahFind(fid); if(!f)return; const J=window.jspdf; if
   doc.setTextColor(25); doc.setFont(undefined,'normal'); doc.setFontSize(10);
   doc.text('Date : '+isoD(f.Date)+'   Équipe : '+f.Equipe+'   Shift : '+shiftLabel(f.Shift)+'   Chef : '+(f.Chef||'—'),14,26);
   doc.text('Effectif : '+(f.effectif||0)+'    Absents : '+(f.absents||0),14,32);
-  doc.autoTable({startY:37,head:[['ID','Nom','Statut']],body:(f.lignes||[]).map(function(l){return [l.id,l.nom,l.statut];}),styles:{fontSize:9},headStyles:{fillColor:[46,125,85]},
+  doc.autoTable({startY:37,head:[['Matricule','Nom','Statut']],body:(f.lignes||[]).map(function(l){return [l.id,l.nom,l.statut+((l.statut==='Autorise'&&l.h1)?(' '+l.h1+'→'+(l.h2||'—')):'')];}),styles:{fontSize:9},headStyles:{fillColor:[46,125,85]},
     didParseCell:function(dd){ if(dd.section==='body'&&dd.column.index===2&&!/present|présent/i.test(String(dd.cell.raw))) dd.cell.styles.textColor=[178,59,50]; }});
   doc.save('Fiche_absence_'+f.Equipe+'_'+isoD(f.Date)+'.pdf'); }
 function ahExcel(fid){ const f=ahFind(fid); if(!f)return;
