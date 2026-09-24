@@ -1194,7 +1194,7 @@ tr.alert td{background:var(--danger-soft)}
   </section>
 </main>
 
-<div class="foot">Valorise — outil interne · <b>version 7.8-SUPABASE · 03-01 · freq/retard/heures/matricule</b> · <span id="userTag2"></span></div>
+<div class="foot">Valorise — outil interne · <b>version 7.9-SUPABASE · 03-01 · BL ref elargie</b> · <span id="userTag2"></span></div>
 </div><!-- /appWrap -->
 <div class="toast" id="toast"></div>
 
@@ -3500,7 +3500,8 @@ function makeCombo(input, items, strict){
   btn.addEventListener('click',function(){ if(list.classList.contains('open'))close(); else{ input.focus(); open(''); } });
   list.addEventListener('mousedown',function(e){ const o=e.target.closest('.combo-opt'); if(!o||o.classList.contains('combo-empty'))return; e.preventDefault(); input.value=o.textContent; close(); livRecalc(); });
 }
-function livBuildRefs(){ LIV_REFS=S.art.filter(isPF).map(function(a){ const m=a.Mesure||coMesFrom(a); return a.Ref+(m?(' \u2014 '+m):''); }).sort(); }
+function livIsBL(a){ const f=norm(a.Famille); if(/matiere|premiere|consom|clou|agrafe|\bvis\b|colle/.test(f)) return false; return isPF(a) || !!a.TypePalette || !!a.Mesure || /^va\d/i.test(String(a.Ref||'')); }
+function livBuildRefs(){ LIV_REFS=S.art.filter(livIsBL).map(function(a){ const m=a.Mesure||coMesFrom(a); return a.Ref+(m?(' \u2014 '+m):''); }).sort(); }
 let ALL_CLIENTS=null;
 function loadAllClients(cb){ if(ALL_CLIENTS){ cb(ALL_CLIENTS); return; }
   api('getLivraisons',{}).then(function(r){ const s={}; (S.clients||[]).forEach(function(c){ if(c)s[c]=1; });
@@ -3539,7 +3540,7 @@ async function doSaveLivraison(){
   const s=livCurrent(); if(!s.client){toast('Client obligatoire','err');return null;} if(!s.lignes.length){toast('Ajoute au moins une ligne','err');return null;}
   const bad=s.lignes.filter(function(l){ return (Number(l.qte)>0 && !l.ref); });
   if(bad.length){ toast('Une ligne a une quantité sans référence (choisis dans la liste ▾)','err'); return null; }
-  const codes={}; S.art.filter(isPF).forEach(function(a){ codes[norm(a.Ref)]=1; });
+  const codes={}; S.art.filter(livIsBL).forEach(function(a){ codes[norm(a.Ref)]=1; });
   const unknown=s.lignes.filter(function(l){ return l.ref && !codes[norm(l.ref)]; });
   if(unknown.length){ toast('Réf inconnue dans les Articles : '+unknown.map(function(l){return l.ref;}).join(', ')+' — ajoute-la d\'abord dans Articles','err'); return null; }
   const key=s.numBl+'|'+s.client;
