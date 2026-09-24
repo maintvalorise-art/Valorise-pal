@@ -1016,8 +1016,8 @@ tr.alert td{background:var(--danger-soft)}
         </div>
         <div class="row-actions"><button class="btn ghost" onclick="scLoad()">Actualiser</button><button class="btn ghost sm" onclick="scExcel()">Excel</button><button class="btn ghost sm" onclick="scPdf()">PDF</button></div>
       </div>
-      <div id="scEntry"></div>
       <div class="card"><h3>État complet</h3><div id="scEtat"></div></div>
+      <div id="scEntry"></div>
       <div class="card"><h3>Ordre de production — semaine suivante</h3><p class="muted" style="margin-top:0">Reste à produire par référence (tous clients).</p><div id="scProd"></div>
         <button class="btn ghost sm" style="margin-top:8px" onclick="scProdExcel()">Excel ordre</button></div>
     </div>
@@ -1194,7 +1194,7 @@ tr.alert td{background:var(--danger-soft)}
   </section>
 </main>
 
-<div class="foot">Valorise — outil interne · <b>version 7.6-SUPABASE · 03-01 · contrats standing</b> · <span id="userTag2"></span></div>
+<div class="foot">Valorise — outil interne · <b>version 7.7-SUPABASE · 03-01 · BL ref stricte</b> · <span id="userTag2"></span></div>
 </div><!-- /appWrap -->
 <div class="toast" id="toast"></div>
 
@@ -2003,7 +2003,7 @@ function renderAbsList(){
   document.getElementById('aList').innerHTML=team.map(function(e){
     const dem=demForDate(e.ID,dateStr); const def=dem?dem.statut:'Present';
     const info=(dem&&dem.statut==='Autorise'&&dem.h1)?(' <span class="muted" style="font-size:11px">('+dem.h1+(dem.h2?('→'+dem.h2):' sans retour')+')</span>'):'';
-    return '<div class="abs-row" data-id="'+esc(e.ID)+'" data-nom="'+esc(e.Nom)+'"><div class="abs-nm">'+esc(e.Nom)+info+'<span>'+esc(e.ID)+'</span></div>'
+    return '<div class="abs-row" data-id="'+esc(e.ID)+'" data-nom="'+esc(e.Nom)+'"'+(dem&&dem.statut==='Autorise'?(' data-h1="'+esc(dem.h1||'')+'" data-h2="'+esc(dem.h2||'')+'"'):'')+'><div class="abs-nm">'+esc(e.Nom)+info+'<span>'+esc(e.ID)+'</span></div>'
       +'<select data-id="'+esc(e.ID)+'" data-nom="'+esc(e.Nom)+'" class="absSel" onchange="absScore(this)">'
       +statuts.map(function(s){return '<option value="'+s+'" '+(s===def?'selected':'')+'>'+s+'</option>';}).join('')+'</select>'
       +'<div class="abs-note">'+NC.map(function(c){return '<span class="nc">'+c[1]+'<input type="number" class="n_'+c[0]+'" min="0" max="'+c[2]+'" value="'+c[2]+'" oninput="absScore(this)"></span>';}).join('')
@@ -2264,20 +2264,24 @@ function loadContrat(cb){ api('getContrat',{}).then(function(r){ STANDING=(r.dat
 function ctFillClients(){ const sel=document.getElementById('ctClient'); const cur=sel.value; const list=Array.from(new Set((ALL_CLIENTS||[]).concat(S.clients||[]).concat(Object.keys(STANDING)).filter(Boolean))).sort();
   sel.innerHTML='<option value="">— choisir —</option>'+list.map(function(c){return '<option>'+esc(c)+'</option>';}).join(''); sel.value=cur; }
 function initContrat(){ coBuildRefs(); loadAllClients(function(){ loadContrat(function(){ ctFillClients(); ctRender(); ctRecap(); }); }); }
+function ctFreqSel(cur){ const o=[['W','Chaque semaine'],['2W','Chaque 2 semaines (15j)'],['M','1× par mois']]; return o.map(function(x){return '<option value="'+x[0]+'" '+((cur||'W')===x[0]?'selected':'')+'>'+x[1]+'</option>';}).join(''); }
 function ctRender(){ const cl=document.getElementById('ctClient').value; if(!cl){ document.getElementById('ctBody').innerHTML='<div class="empty">Choisis un client.</div>'; return; }
   const st=STANDING[cl]||{};
-  let h='<div class="tbl-wrap"><table><thead><tr><th>Réf</th><th>Mesure</th><th>Type</th><th>Qté / semaine</th></tr></thead><tbody>';
-  CO_REFS.forEach(function(r){ h+='<tr data-ref="'+esc(r.ref)+'"><td><b>'+esc(r.ref)+'</b></td><td>'+esc(r.mesure)+'</td><td>'+esc(r.type)+'</td><td><input type="number" class="ctQ" min="0" value="'+(st[r.ref]||'')+'" style="width:80px"></td></tr>'; });
+  let h='<div class="tbl-wrap"><table><thead><tr><th>Réf</th><th>Mesure</th><th>Type</th><th>Qté / période</th><th>Fréquence</th></tr></thead><tbody>';
+  CO_REFS.forEach(function(r){ const v=st[r.ref]; const q=(v&&typeof v==='object')?v.q:(v||''); const f=(v&&typeof v==='object')?v.f:'W';
+    h+='<tr data-ref="'+esc(r.ref)+'"><td><b>'+esc(r.ref)+'</b></td><td>'+esc(r.mesure)+'</td><td>'+esc(r.type)+'</td>'
+      +'<td><input type="number" class="ctQ" min="0" value="'+(q||'')+'" style="width:80px"></td>'
+      +'<td><select class="ctF">'+ctFreqSel(f)+'</select></td></tr>'; });
   h+='</tbody></table></div>';
   document.getElementById('ctBody').innerHTML=h;
 }
 function ctSave(){ const cl=document.getElementById('ctClient').value; if(!cl){toast('Choisis un client','err');return;}
-  const obj={}; [].forEach.call(document.querySelectorAll('#ctBody tr[data-ref]'),function(tr){ const q=Number(tr.querySelector('.ctQ').value||0); if(q)obj[tr.dataset.ref]=q; });
+  const obj={}; [].forEach.call(document.querySelectorAll('#ctBody tr[data-ref]'),function(tr){ const q=Number(tr.querySelector('.ctQ').value||0); const f=tr.querySelector('.ctF').value; if(q)obj[tr.dataset.ref]={q:q,f:f}; });
   if(Object.keys(obj).length) STANDING[cl]=obj; else delete STANDING[cl];
   api('saveContrat',{password:ADMIN_PWD,data:STANDING}).then(function(){ toast('Contrat enregistré ✔','ok'); ctRecap(); }).catch(function(e){toast(e.message,'err');}); }
 function ctRecap(){ const clients=Object.keys(STANDING).sort();
   document.getElementById('ctRecap').innerHTML= clients.length? '<div class="tbl-wrap"><table><thead><tr><th>Client</th><th>Réfs</th><th>Total / semaine</th></tr></thead><tbody>'
-    +clients.map(function(c){ const refs=Object.keys(STANDING[c]); const tot=refs.reduce(function(s,k){return s+Number(STANDING[c][k]||0);},0); return '<tr><td>'+esc(c)+'</td><td>'+refs.length+'</td><td><b>'+tot+'</b></td></tr>'; }).join('')+'</tbody></table></div>'
+    +clients.map(function(c){ const refs=Object.keys(STANDING[c]); const tot=refs.reduce(function(s,k){const v=STANDING[c][k];return s+Number((v&&typeof v==='object')?v.q:v||0);},0); return '<tr><td>'+esc(c)+'</td><td>'+refs.length+'</td><td><b>'+tot+'</b></td></tr>'; }).join('')+'</tbody></table></div>'
     : '<div class="empty">Aucun contrat défini.</div>'; }
 
 /* ================= SUIVI COMMANDES (état auto) ================= */
@@ -2286,10 +2290,12 @@ function initSuivi(){ coBuildRefs(); document.getElementById('scAnnee').value=S.
 function scWeek(){ return document.getElementById('scAnnee').value+'-'+document.getElementById('scSemaine').value; }
 function scRefCode(s){ return String(s||'').split(/\s+[—\u2014]\s+/)[0].trim(); }
 function scGet(ref,cl){ return (SC_DATA[ref]&&SC_DATA[ref][cl])||{q:null}; }
-function scStandQ(ref,cl){ return Number((STANDING[cl]&&STANDING[cl][ref])||0); }
+function scDueThisWeek(f,an,sem){ f=f||'W'; if(f==='W')return true; if(f==='2W')return (Number(sem)%2===1); if(f==='M'){ const ws=weekToDate(an,sem); return new Date(ws+'T00:00:00').getDate()<=7; } return true; }
+function scStandQ(ref,cl){ const v=STANDING[cl]&&STANDING[cl][ref]; if(v==null)return 0; const q=(typeof v==='object')?Number(v.q||0):Number(v||0); const f=(typeof v==='object')?(v.f||'W'):'W';
+  const an=Number(document.getElementById('scAnnee').value), sem=Number(document.getElementById('scSemaine').value); return scDueThisWeek(f,an,sem)?q:0; }
+function scRet(ref,cl){ const o=SC_DATA[ref]&&SC_DATA[ref][cl]; if(o&&o.ret!=null&&o.ret!=='') return Number(o.ret); return Number((SC_RETARD[ref]&&SC_RETARD[ref][cl])||0); }
 function scEffQ(ref,cl){ const o=SC_DATA[ref]&&SC_DATA[ref][cl]; return (o&&o.q!=null&&o.q!=='')?Number(o.q):scStandQ(ref,cl); }
 function scIsOverride(ref,cl){ const o=SC_DATA[ref]&&SC_DATA[ref][cl]; return !!(o&&o.q!=null&&o.q!==''); }
-function scRet(ref,cl){ return Number((SC_RETARD[ref]&&SC_RETARD[ref][cl])||0); }
 function scLivOf(ref,cl){ return Number((SC_LIV[ref]&&SC_LIV[ref][cl])||0); }
 function scLoad(){ const an=Number(document.getElementById('scAnnee').value), sem=Number(document.getElementById('scSemaine').value); let pa=an,ps=sem-1; if(ps<1){pa=an-1;ps=52;}
   document.getElementById('scEtat').innerHTML='<div class="loading"><span class="spin"></span> …</div>';
@@ -2310,14 +2316,17 @@ function scLoad(){ const an=Number(document.getElementById('scAnnee').value), se
 function scRefsClient(cl){ const seen={}, out=[]; CO_REFS.forEach(function(r){ if(scEffQ(r.ref,cl)||scLivOf(r.ref,cl)||scRet(r.ref,cl)){ seen[r.ref]=1; out.push({ref:r.ref,mesure:r.mesure}); } });
   [SC_DATA,SC_LIV,SC_RETARD].forEach(function(src){ Object.keys(src).forEach(function(ref){ if(src[ref]&&src[ref][cl]&&!seen[ref]){ seen[ref]=1; const a=CO_REFS.find(function(x){return x.ref===ref;}); out.push({ref:ref,mesure:a?a.mesure:''}); } }); });
   return out; }
-/* SAISIE commande pour le client sélectionné */
+/* SAISIE commande pour le client sélectionné (Retard éditable) */
 function scRender(){ const cl=document.getElementById('scClient').value;
-  // zone de saisie (seulement si un client précis est choisi)
   const entry=document.getElementById('scEntry');
   if(cl){ const refs=CO_REFS;
-    let h='<div class="card"><h3>Saisie commande — '+esc(cl)+'</h3><div class="tbl-wrap"><table><thead><tr><th>Réf</th><th>Mesure</th><th>Retard</th><th>Commandé</th><th>Livré (auto)</th><th>Reste</th></tr></thead><tbody>';
+    let h='<div class="card"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px"><h3 style="margin:0">Saisie commande — '+esc(cl)+'</h3>'
+      +'<button class="btn ghost sm" onclick="scClearRetard()">🧹 Effacer le retard de ce client</button></div>'
+      +'<p class="muted" style="margin:4px 0 8px">Le Retard est modifiable (mets 0 pour annuler un reliquat non voulu).</p>'
+      +'<div class="tbl-wrap"><table><thead><tr><th>Réf</th><th>Mesure</th><th>Retard</th><th>Commandé</th><th>Livré (auto)</th><th>Reste</th></tr></thead><tbody>';
     refs.forEach(function(r){ const q=scEffQ(r.ref,cl); const ret=scRet(r.ref,cl); const liv=scLivOf(r.ref,cl); const reste=ret+q-liv;
-      h+='<tr data-ref="'+esc(r.ref)+'"><td><b>'+esc(r.ref)+'</b></td><td>'+esc(r.mesure)+'</td><td class="scRet">'+(ret||'')+'</td>'
+      h+='<tr data-ref="'+esc(r.ref)+'"><td><b>'+esc(r.ref)+'</b></td><td>'+esc(r.mesure)+'</td>'
+        +'<td><input type="number" class="scRetIn" value="'+(ret||'')+'" oninput="scRecalc(this)" style="width:60px"></td>'
         +'<td><input type="number" class="scQ" min="0" value="'+(q||'')+'" oninput="scRecalc(this)" style="width:70px"></td>'
         +'<td>'+(liv||'')+'</td><td class="scR'+(reste>0?' late':'')+'">'+reste+'</td></tr>'; });
     h+='</tbody></table></div><button class="btn" style="width:100%;margin-top:10px" onclick="scSave()">Enregistrer la commande</button></div>';
@@ -2325,11 +2334,21 @@ function scRender(){ const cl=document.getElementById('scClient').value;
   } else entry.innerHTML='';
   scEtat(); scProd();
 }
-function scRecalc(el){ const tr=el.closest('tr'); const ref=tr.dataset.ref; const cl=document.getElementById('scClient').value;
-  const q=Number(tr.querySelector('.scQ').value||0); const reste=scRet(ref,cl)+q-scLivOf(ref,cl); const c=tr.querySelector('.scR'); c.textContent=reste; c.className='scR'+(reste>0?' late':''); }
+function scClearRetard(){ if(!confirm('Mettre à zéro tout le retard de ce client (pour cette semaine) ?'))return;
+  [].forEach.call(document.querySelectorAll('#scEntry tr[data-ref]'),function(tr){ const ri=tr.querySelector('.scRetIn'); if(ri){ ri.value='0'; scRecalc(ri); } });
+  toast('Retards mis à 0 — clique Enregistrer pour valider','ok'); }
+function scRecalc(el){ const tr=el.closest('tr'); const ref=tr.dataset.ref;
+  const q=Number(tr.querySelector('.scQ').value||0); const riEl=tr.querySelector('.scRetIn'); const ret=riEl?Number(riEl.value||0):scRet(ref,document.getElementById('scClient').value);
+  const reste=ret+q-scLivOf(ref,document.getElementById('scClient').value); const c=tr.querySelector('.scR'); c.textContent=reste; c.className='scR'+(reste>0?' late':''); }
 function scGatherEntry(){ const cl=document.getElementById('scClient').value; if(!cl)return;
-  [].forEach.call(document.querySelectorAll('#scEntry tr[data-ref]'),function(tr){ const ref=tr.dataset.ref; const q=Number(tr.querySelector('.scQ').value||0);
-    if(q){ (SC_DATA[ref]=SC_DATA[ref]||{})[cl]=Object.assign({},SC_DATA[ref][cl],{q:q}); } else if(SC_DATA[ref]&&SC_DATA[ref][cl]){ delete SC_DATA[ref][cl].q; if(!Object.keys(SC_DATA[ref][cl]).length)delete SC_DATA[ref][cl]; } }); }
+  [].forEach.call(document.querySelectorAll('#scEntry tr[data-ref]'),function(tr){ const ref=tr.dataset.ref; const q=Number(tr.querySelector('.scQ').value||0); const riEl=tr.querySelector('.scRetIn'); const ret=riEl?Number(riEl.value||0):null;
+    const cur=(SC_DATA[ref]&&SC_DATA[ref][cl])||{}; const o=Object.assign({},cur);
+    if(q) o.q=q; else delete o.q;
+    // retard override : on stocke seulement s'il diffère du retard hérité (sinon on laisse hériter)
+    const inherited=Number((SC_RETARD[ref]&&SC_RETARD[ref][cl])||0);
+    if(ret!=null && ret!==inherited) o.ret=ret; else delete o.ret;
+    if(Object.keys(o).length) (SC_DATA[ref]=SC_DATA[ref]||{})[cl]=o; else if(SC_DATA[ref]) delete SC_DATA[ref][cl];
+  }); }
 function scSave(){ const cl=document.getElementById('scClient').value; if(!cl){toast('Choisis un client','err');return;} scGatherEntry();
   // reste stocké = retard + commandé - livré(auto)
   const reste={}; const refsAll={}; Object.keys(SC_DATA).forEach(function(r){refsAll[r]=1;}); Object.keys(SC_LIV).forEach(function(r){refsAll[r]=1;}); Object.keys(SC_RETARD).forEach(function(r){refsAll[r]=1;});
@@ -2937,7 +2956,7 @@ function dmToggle(){ const t=document.getElementById('dmType').value; document.g
 function dmFillOps(){ const m=metaOfChef(document.getElementById('dmChef').value); const sel=document.getElementById('dmOp');
   if(!m){ sel.innerHTML='<option value="">—</option>'; return; }
   const ops=S.emp.filter(function(e){return equipeOf(e.ID)===m.equipe;});
-  sel.innerHTML=ops.length?ops.map(function(e){return '<option value="'+esc(e.ID)+'">'+esc(e.Nom)+'</option>';}).join(''):'<option value="">Aucun opérateur</option>'; }
+  sel.innerHTML=ops.length?ops.map(function(e){return '<option value="'+esc(e.ID)+'">'+esc(e.ID)+' — '+esc(e.Nom)+'</option>';}).join(''):'<option value="">Aucun opérateur</option>'; }
 function initDemandes(){ const list=chefsOfWeek();
   document.getElementById('dmChef').innerHTML='<option value="">— chef —</option>'+list.map(function(c){return '<option value="'+esc(chefKey(c))+'">'+esc(c.chef)+' ('+esc(eqLabel(c.equipe))+' · '+esc(shiftLabel(c.shift))+')</option>';}).join('');
   document.getElementById('dmDu').value=S.today; document.getElementById('dmAu').value=S.today; document.getElementById('dmDate').value=S.today;
@@ -3462,17 +3481,22 @@ function dvExcel(){ const lignes=dvGather(); if(!lignes.length){toast('Rien à e
 
 /* ================= BON DE LIVRAISON ================= */
 let LAST_LIV=null, LIV_REFS=[];
-function makeCombo(input, items){
+function makeCombo(input, items, strict){
   const wrap=input.parentElement; const list=wrap.querySelector('.combo-list'); const btn=wrap.querySelector('.combo-btn');
-  function render(f){ f=String(f||'').toLowerCase().trim(); const arr=f?items.filter(function(v){return v.toLowerCase().indexOf(f)!==-1;}):items;
-    list.innerHTML=arr.length?arr.slice(0,400).map(function(v){return '<div class="combo-opt">'+esc(v)+'</div>';}).join(''):'<div class="combo-empty">Aucun résultat — saisie manuelle possible</div>'; }
+  function nz(s){ return String(s||'').toLowerCase().replace(/[×x]/g,'*').replace(/[—\u2014]/g,' ').replace(/\s+/g,' ').trim(); }
+  function render(f){ const q=nz(f); const toks=q.split(' ').filter(Boolean);
+    const arr=!toks.length?items:items.filter(function(v){ const nv=nz(v); return toks.every(function(t){return nv.indexOf(t)>=0;}); });
+    list.innerHTML=arr.length?arr.slice(0,400).map(function(v){return '<div class="combo-opt">'+esc(v)+'</div>';}).join(''):('<div class="combo-empty">'+(strict?'Aucun article — ajoute-la d\'abord dans Articles':'Aucun résultat')+'</div>'); }
   function open(f){ render(f); list.classList.add('open'); } function close(){ list.classList.remove('open'); }
   input.addEventListener('focus',function(){ open(''); });
   input.addEventListener('input',function(){ open(input.value); livRecalc(); });
-  input.addEventListener('blur',function(){ setTimeout(close,180); });
+  input.addEventListener('blur',function(){ setTimeout(function(){ close();
+    if(strict && input.value && items.indexOf(input.value)<0){ const q=nz(input.value); const cand=items.filter(function(v){return nz(v).indexOf(q)>=0;});
+      if(cand.length===1){ input.value=cand[0]; } /* sinon : on laisse le texte, le contrôle se fait à l'enregistrement */
+      livRecalc(); } },180); });
   input.addEventListener('keydown',function(e){ if(e.key==='Escape') close(); });
   btn.addEventListener('click',function(){ if(list.classList.contains('open'))close(); else{ input.focus(); open(''); } });
-  list.addEventListener('mousedown',function(e){ const o=e.target.closest('.combo-opt'); if(!o)return; e.preventDefault(); input.value=o.textContent; close(); livRecalc(); });
+  list.addEventListener('mousedown',function(e){ const o=e.target.closest('.combo-opt'); if(!o||o.classList.contains('combo-empty'))return; e.preventDefault(); input.value=o.textContent; close(); livRecalc(); });
 }
 function livBuildRefs(){ LIV_REFS=S.art.filter(isPF).map(function(a){ const m=a.Mesure||coMesFrom(a); return a.Ref+(m?(' \u2014 '+m):''); }).sort(); }
 let ALL_CLIENTS=null;
@@ -3496,7 +3520,7 @@ function addLivLine(ref,type,trait,qte){
     +'<input type="number" class="lvQte" placeholder="Qté" min="0" value="'+(qte||'')+'" oninput="livRecalc()">'
     +'<button class="xbtn" onclick="this.parentNode.remove();livRecalc();">×</button>';
   document.getElementById('livLines').appendChild(div);
-  makeCombo(div.querySelector('.lvRef'), LIV_REFS);
+  makeCombo(div.querySelector('.lvRef'), LIV_REFS, true);
 }
 function livRecalc(){ let t=0; [].forEach.call(document.querySelectorAll('#livLines .lvQte'),function(q){ const v=parseFloat(q.value); if(!isNaN(v))t+=v; }); const el=document.getElementById('livTotal'); if(el)el.textContent=t; }
 function livSplitRef(full){ const p=String(full||'').split('\u2014'); return {code:(p[0]||'').trim(), mesure:(p[1]||'').trim()}; }
@@ -3511,6 +3535,11 @@ function livCurrent(){
 let LIV_SAVED_KEY=null;
 async function doSaveLivraison(){
   const s=livCurrent(); if(!s.client){toast('Client obligatoire','err');return null;} if(!s.lignes.length){toast('Ajoute au moins une ligne','err');return null;}
+  const bad=s.lignes.filter(function(l){ return (Number(l.qte)>0 && !l.ref); });
+  if(bad.length){ toast('Une ligne a une quantité sans référence (choisis dans la liste ▾)','err'); return null; }
+  const codes={}; S.art.filter(isPF).forEach(function(a){ codes[norm(a.Ref)]=1; });
+  const unknown=s.lignes.filter(function(l){ return l.ref && !codes[norm(l.ref)]; });
+  if(unknown.length){ toast('Réf inconnue dans les Articles : '+unknown.map(function(l){return l.ref;}).join(', ')+' — ajoute-la d\'abord dans Articles','err'); return null; }
   const key=s.numBl+'|'+s.client;
   if(LIV_SAVED_KEY===key && LAST_LIV){ return LAST_LIV; }
   try{ const d=await api('saveLivraison',{date:s.date,client:s.client,ncmd:s.ncmd,numBl:s.numBl,responsable:s.responsable,lignes:s.lignes});
