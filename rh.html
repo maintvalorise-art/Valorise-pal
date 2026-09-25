@@ -2,6 +2,7 @@
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Approbation RH — Valorise Maroc</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <style>
 :root{--green:#164a34;--pine:#0d2c1f;--gold:#C98A3A;--line:#e3e8e4;--muted:#6b7d72;--danger:#b23b32}
 *{box-sizing:border-box}
@@ -34,54 +35,87 @@ button{flex:1;padding:12px;border:0;border-radius:10px;font-weight:700;font-size
 <script>
 const SUPA_URL="https://ahabpevziommeqmaesli.supabase.co";
 const SUPA_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFoYWJwZXZ6aW9tbWVxbWFlc2xpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg1MTI5NjUsImV4cCI6MjEwNDA4ODk2NX0.E__vx0LLcj9AKRyu08PQS4vqodceD5EajKqWrQMWZ4E";
-const RH={nom:'Farah El Guebassi', code:'1357'};
+const RH_NOM='Farah El Guebassi';
 const SB=window.supabase.createClient(SUPA_URL,SUPA_KEY);
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
 function isoD(v){ if(!v)return''; const s=String(v); const m=s.match(/^(\d{4})-(\d{2})-(\d{2})/); return m?m[0]:s.slice(0,10); }
 function qs(k){ return new URLSearchParams(location.search).get(k); }
-let D=null, DID=qs('id');
+let D=null, DID=qs('id'), RHAUTH=null;
 function stat(d){ if(d.Statut==='Refusée')return'Refusée'; if(d.apprRH)return'Approuvée'; if(d.apprMgr)return'En attente RH'; return'En attente Manager'; }
 function label(d){ return d.Type==='Conge'?('Congé du '+isoD(d.DateDebut)+' au '+isoD(d.DateFin)):('Autorisation le '+isoD(d.Date)+' — sortie '+(d.HeureSortie||'—')+(d.HeureRetour?(' → retour '+d.HeureRetour):' (sans retour)')); }
 async function load(){
   if(!DID){ document.getElementById('bd').innerHTML='<div class="state">Lien invalide (aucune demande).</div>'; return; }
   document.getElementById('foot').textContent=DID;
-  const {data,error}=await SB.from('kv').select('doc').eq('collection','demandes').eq('id',DID).maybeSingle();
-  if(error){ document.getElementById('bd').innerHTML='<div class="state">Erreur : '+esc(error.message)+'</div>'; return; }
-  if(!data){ document.getElementById('bd').innerHTML='<div class="state">Demande introuvable.</div>'; return; }
-  D=data.doc; render();
+  const [rd,ra]=await Promise.all([
+    SB.from('kv').select('doc').eq('collection','demandes').eq('id',DID).maybeSingle(),
+    SB.from('kv').select('doc').eq('collection','config').eq('id','rhAuth').maybeSingle()
+  ]);
+  if(rd.error){ document.getElementById('bd').innerHTML='<div class="state">Erreur : '+esc(rd.error.message)+'</div>'; return; }
+  if(!rd.data){ document.getElementById('bd').innerHTML='<div class="state">Demande introuvable.</div>'; return; }
+  D=rd.data.doc; RHAUTH=(ra.data&&ra.data.doc)||null; render();
 }
-function render(){
-  const s=stat(D); const c=s==='Approuvée'?'#2e7d55':(s==='Refusée'?'#b23b32':'#C98A3A');
-  let h='<div class="big">'+(D.Type==='Conge'?'Demande de congé':'Autorisation de sortie')+'</div>';
+function ficheHead(){ let h='<div class="big">'+(D.Type==='Conge'?'Demande de congé':'Autorisation de sortie')+'</div>';
   h+='<div class="row"><span class="k">Opérateur</span><span class="v">'+esc(D.Nom)+'</span></div>';
   h+='<div class="row"><span class="k">Matricule</span><span class="v">'+esc(D.EmployeID)+'</span></div>';
   h+='<div class="row"><span class="k">Équipe / Chef</span><span class="v">'+esc(D.Equipe)+' · '+esc(D.Chef)+'</span></div>';
   h+='<div class="row"><span class="k">Détail</span><span class="v">'+esc(label(D))+'</span></div>';
   if(D.Motif) h+='<div class="row"><span class="k">Motif</span><span class="v">'+esc(D.Motif)+'</span></div>';
-  h+='<div class="row"><span class="k">Statut</span><span class="v"><span class="badge" style="background:'+c+'">'+s+'</span></span></div>';
   h+='<div class="appr">Approbations :<br>• Team Leader : <b>'+(D.apprTL?esc(D.apprTL.by)+' ✔':'—')+'</b><br>• Manager V2 : <b>'+(D.apprMgr?esc(D.apprMgr.by)+' ✔':'—')+'</b><br>• RH : <b>'+(D.apprRH?esc(D.apprRH.by)+' ✔':'—')+'</b></div>';
-  if(s==='Approuvée'){ h+='<div class="msg" style="color:#2e7d55">✔ Déjà approuvée par RH.</div>'; }
+  return h; }
+function render(){
+  const s=stat(D); let h=ficheHead();
+  if(s==='Approuvée'){ h+='<div class="msg" style="color:#2e7d55">✔ Déjà approuvée par RH ('+esc(D.apprRH?D.apprRH.by:'')+').</div><div class="btns"><button class="ok" onclick="rhPdf()">Télécharger la fiche PDF</button></div>'; }
   else if(s==='Refusée'){ h+='<div class="msg" style="color:#b23b32">Demande refusée.</div>'; }
   else if(s==='En attente Manager'){ h+='<div class="msg" style="color:#C98A3A">En attente de l\'approbation Manager avant RH.</div>'; }
-  else {
-    h+='<label>Code RH ('+esc(RH.nom)+')</label><input id="code" type="password" inputmode="numeric" placeholder="••••" onkeydown="if(event.key===\'Enter\')approve()">';
-    h+='<div class="btns"><button class="ok" onclick="approve()">Approuver</button><button class="no" onclick="refuse()">Refuser</button></div>';
-    h+='<div class="msg" id="msg"></div>';
+  else if(!RHAUTH){
+    // première utilisation : RH définit son email + code
+    h+='<div class="msg" style="color:#456">Première connexion RH : définis ton email et ton code (4 chiffres).</div>';
+    h+='<label>Email RH</label><input id="em" type="email" style="letter-spacing:0;text-align:left" placeholder="ton@email.com">';
+    h+='<label>Choisir un code (4 chiffres)</label><input id="c1" type="password" inputmode="numeric" maxlength="4" placeholder="••••">';
+    h+='<label>Confirmer le code</label><input id="c2" type="password" inputmode="numeric" maxlength="4" placeholder="••••" onkeydown="if(event.key===\'Enter\')setupRh()">';
+    h+='<div class="btns"><button class="ok" onclick="setupRh()">Enregistrer mon code</button></div><div class="msg" id="msg"></div>';
+  } else {
+    h+='<label>Code RH ('+esc(RHAUTH.email||RH_NOM)+')</label><input id="code" type="password" inputmode="numeric" maxlength="4" placeholder="••••" onkeydown="if(event.key===\'Enter\')approve()">';
+    h+='<div class="btns"><button class="ok" onclick="approve()">Approuver</button><button class="no" onclick="refuse()">Refuser</button></div><div class="msg" id="msg"></div>';
   }
   document.getElementById('bd').innerHTML=h;
 }
 async function save(){ const {error}=await SB.from('kv').upsert({collection:'demandes',id:DID,doc:D,updated_at:new Date().toISOString()}); if(error)throw new Error(error.message); }
-async function approve(){ const code=document.getElementById('code').value; const msg=document.getElementById('msg');
-  if(code!==RH.code){ msg.style.color='#b23b32'; msg.textContent='Code incorrect'; return; }
+async function setupRh(){ const em=document.getElementById('em').value.trim(), c1=document.getElementById('c1').value, c2=document.getElementById('c2').value; const msg=document.getElementById('msg');
+  if(!/^[^@]+@[^@]+\.[^@]+$/.test(em)){ msg.style.color='#b23b32'; msg.textContent='Email invalide'; return; }
+  if(!/^\d{4}$/.test(c1)){ msg.style.color='#b23b32'; msg.textContent='Le code doit faire 4 chiffres'; return; }
+  if(c1!==c2){ msg.style.color='#b23b32'; msg.textContent='Les deux codes ne correspondent pas'; return; }
   msg.style.color='#456'; msg.textContent='Enregistrement…';
-  D.apprRH={by:RH.nom,at:new Date().toISOString()}; D.Statut='Approuvée';
-  try{ await save(); render(); }catch(e){ msg.style.color='#b23b32'; msg.textContent='Erreur : '+e.message; }
+  const {error}=await SB.from('kv').upsert({collection:'config',id:'rhAuth',doc:{email:em,code:c1,nom:RH_NOM},updated_at:new Date().toISOString()});
+  if(error){ msg.style.color='#b23b32'; msg.textContent='Erreur : '+error.message; return; }
+  RHAUTH={email:em,code:c1,nom:RH_NOM}; render();
+}
+async function approve(){ const code=document.getElementById('code').value; const msg=document.getElementById('msg');
+  if(code!==RHAUTH.code){ msg.style.color='#b23b32'; msg.textContent='Code incorrect'; return; }
+  msg.style.color='#456'; msg.textContent='Enregistrement…';
+  D.apprRH={by:RHAUTH.nom||RH_NOM, email:RHAUTH.email||'', at:new Date().toISOString()}; D.Statut='Approuvée';
+  try{ await save(); render(); rhPdf(); }catch(e){ msg.style.color='#b23b32'; msg.textContent='Erreur : '+e.message; }
 }
 async function refuse(){ const code=document.getElementById('code').value; const msg=document.getElementById('msg');
-  if(code!==RH.code){ msg.style.color='#b23b32'; msg.textContent='Code incorrect'; return; }
+  if(code!==RHAUTH.code){ msg.style.color='#b23b32'; msg.textContent='Code incorrect'; return; }
   if(!confirm('Refuser cette demande ?'))return;
   D.Statut='Refusée'; try{ await save(); render(); }catch(e){ msg.style.color='#b23b32'; msg.textContent='Erreur : '+e.message; }
 }
+function rhPdf(){ const J=window.jspdf; if(!J||!J.jsPDF){ return; } const d=D;
+  const doc=new J.jsPDF({unit:'mm',format:'a5',orientation:'landscape'}); doc.setFillColor(22,74,52);doc.rect(0,0,210,16,'F');doc.setTextColor(255);doc.setFont(undefined,'bold');doc.setFontSize(13);
+  doc.text('VALORISE MAROC — '+(d.Type==='Conge'?'DEMANDE DE CONGÉ':'AUTORISATION DE SORTIE'),12,10);
+  doc.setTextColor(20);doc.setFont(undefined,'normal');doc.setFontSize(11); let y=28;
+  doc.text('Opérateur : '+(d.Nom||''),14,y); y+=7; doc.text('Matricule : '+(d.EmployeID||'')+'      Équipe : '+(d.Equipe||''),14,y); y+=7;
+  doc.text('Chef d\'équipe : '+(d.Chef||''),14,y); y+=7;
+  if(d.Type==='Conge') doc.text('Période : du '+isoD(d.DateDebut)+' au '+isoD(d.DateFin),14,y);
+  else doc.text('Date : '+isoD(d.Date)+'    Sortie : '+(d.HeureSortie||'—')+'    Retour : '+(d.HeureRetour||'sans retour'),14,y);
+  y+=7; if(d.Motif){ doc.text('Motif : '+d.Motif,14,y); y+=7; }
+  doc.text('Statut : '+stat(d),14,y); y+=9;
+  doc.setFont(undefined,'bold'); doc.text('Approbations (signatures électroniques par code)',14,y); y+=6.5; doc.setFont(undefined,'normal'); doc.setFontSize(10);
+  const ap=function(l,a){ doc.text('• '+l+' : '+(a?(a.by+'   ✔ '+(a.at||'').slice(0,16).replace('T',' ')):'—'),16,y); y+=6; };
+  ap('Approuvé Team Leader',d.apprTL); ap('Approuvé Manager V2',d.apprMgr); ap('Approuvé RH',d.apprRH);
+  doc.setFontSize(7);doc.setTextColor(140);doc.text((d.DID||DID||'')+' · Valorise Maroc',196,142,{align:'right'});
+  doc.save((d.Type==='Conge'?'Conge_':'Autorisation_')+(d.Nom||'')+'.pdf'); }
 load();
 </script>
 </body></html>
