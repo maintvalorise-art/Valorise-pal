@@ -1194,7 +1194,7 @@ tr.alert td{background:var(--danger-soft)}
   </section>
 </main>
 
-<div class="foot">Valorise — outil interne · <b>version 8.0-SUPABASE · 03-01 · mapping FE + livré</b> · <span id="userTag2"></span></div>
+<div class="foot">Valorise — outil interne · <b>version 8.1-SUPABASE · 03-01 · demandes 3 niveaux</b> · <span id="userTag2"></span></div>
 </div><!-- /appWrap -->
 <div class="toast" id="toast"></div>
 
@@ -2957,6 +2957,9 @@ function thrDelete(id){ if(!id){toast('Fiche sans identifiant','err');return;} c
 
 /* ================= DEMANDES (congé / autorisation) ================= */
 let DEM_ALL=[], DEM_APPROVED=[];
+const APPR_MGR={nom:'Ayman Bhar', role:'Manager V2', code:'2468'};
+const APPR_RH={nom:'Farah El Guebassi', role:'RH', code:'1357'};
+function demStatut(d){ if(d.Statut==='Refusée')return 'Refusée'; if(d.apprRH)return 'Approuvée'; if(d.apprMgr)return 'En attente RH'; return 'En attente Manager'; }
 function dmToggle(){ const t=document.getElementById('dmType').value; document.getElementById('dmConge').style.display=t==='Conge'?'block':'none'; document.getElementById('dmAuto').style.display=t==='Autorisation'?'block':'none'; }
 function dmFillOps(){ const m=metaOfChef(document.getElementById('dmChef').value); const sel=document.getElementById('dmOp');
   if(!m){ sel.innerHTML='<option value="">—</option>'; return; }
@@ -2970,7 +2973,7 @@ function initDemandes(){ const list=chefsOfWeek();
 function dmSubmit(){ const m=metaOfChef(document.getElementById('dmChef').value); if(!m){toast('Choisis le chef','err');return;}
   const opId=document.getElementById('dmOp').value; if(!opId){toast('Choisis l\'opérateur','err');return;}
   const op=S.emp.find(function(e){return String(e.ID)===String(opId);})||{}; const t=document.getElementById('dmType').value;
-  const rec={Type:t, EmployeID:String(opId), Nom:op.Nom||'', Chef:m.chef, Equipe:m.equipe, Shift:m.shift, Motif:document.getElementById('dmMotif').value.trim(), Statut:'En attente', createdAt:new Date().toISOString()};
+  const rec={Type:t, EmployeID:String(opId), Nom:op.Nom||'', Chef:m.chef, Equipe:m.equipe, Shift:m.shift, Motif:document.getElementById('dmMotif').value.trim(), Statut:'En attente Manager', apprTL:{by:m.chef,at:new Date().toISOString()}, createdAt:new Date().toISOString()};
   if(t==='Conge'){ rec.DateDebut=document.getElementById('dmDu').value; rec.DateFin=document.getElementById('dmAu').value; if(!rec.DateDebut||!rec.DateFin){toast('Période requise','err');return;} }
   else { rec.Date=document.getElementById('dmDate').value; rec.HeureSortie=document.getElementById('dmH1').value; rec.HeureRetour=document.getElementById('dmH2').value; if(!rec.Date||!rec.HeureSortie){toast('Date + heure de sortie requises','err');return;} }
   api('saveDemande',{password:ADMIN_PWD,rec:rec}).then(function(){ toast('Demande envoyée ✔','ok'); document.getElementById('dmMotif').value=''; loadDemList(); }).catch(function(e){toast(e.message,'err');}); }
@@ -2985,16 +2988,32 @@ function loadDemList(){ api('getDemandes',{}).then(function(r){ DEM_ALL=(r.rows|
 function initDemRh(){ loadDemRh(); }
 function loadDemRh(){ document.getElementById('drBody').innerHTML='<div class="loading"><span class="spin"></span> …</div>';
   api('getDemandes',{}).then(function(r){ DEM_ALL=(r.rows||[]).sort(function(a,b){return (a.createdAt||'')<(b.createdAt||'')?1:-1;}); drRender(); }).catch(function(e){ document.getElementById('drBody').innerHTML='<div class="warnbox">'+esc(e.message)+'</div>'; }); }
+function demProg(d){ const a=function(x){return x?'✓':'…';}; return '<span style="font-size:11px" title="TL / Manager / RH">TL '+a(d.apprTL)+' · Mgr '+a(d.apprMgr)+' · RH '+a(d.apprRH)+'</span>'; }
 function drRender(){ const st=document.getElementById('drStatut').value, ty=document.getElementById('drType').value, q=(document.getElementById('drSearch').value||'').toLowerCase();
-  const rows=DEM_ALL.filter(function(d){ if(st&&d.Statut!==st)return false; if(ty&&d.Type!==ty)return false; if(q&&((d.Nom||'')+' '+(d.Chef||'')).toLowerCase().indexOf(q)<0)return false; return true; });
-  document.getElementById('drBody').innerHTML= rows.length? '<div class="tbl-wrap"><table><thead><tr><th>Date dem.</th><th>Opérateur</th><th>Équipe</th><th>Demande</th><th>Motif</th><th>Statut</th><th></th></tr></thead><tbody>'
-    +rows.map(function(d){ return '<tr><td>'+esc((d.createdAt||'').slice(0,10))+'</td><td>'+esc(d.EmployeID||'')+' — '+esc(d.Nom)+'</td><td>'+esc(eqLabel(d.Equipe))+'</td><td>'+esc(demLabel(d))+'</td><td>'+esc(d.Motif||'')+'</td><td>'+demBadge(d.Statut)+'</td>'
-      +'<td style="white-space:nowrap">'+(d.Statut==='En attente'?'<button class="btn sm" onclick="drApprove(\''+esc(d.DID)+'\')">Approuver</button> <button class="btn sm ghost" onclick="drRefuse(\''+esc(d.DID)+'\')">Refuser</button> ':'<button class="btn sm ghost" onclick="drPdf(\''+esc(d.DID)+'\')">Fiche</button> ')+'<button class="btn link" onclick="drDelete(\''+esc(d.DID)+'\')">✕</button></td></tr>'; }).join('')+'</tbody></table></div>'
+  const rows=DEM_ALL.filter(function(d){ if(st&&demStatut(d)!==st)return false; if(ty&&d.Type!==ty)return false; if(q&&((d.Nom||'')+' '+(d.Chef||'')).toLowerCase().indexOf(q)<0)return false; return true; });
+  document.getElementById('drBody').innerHTML= rows.length? '<div class="tbl-wrap"><table><thead><tr><th>Date</th><th>Opérateur</th><th>Équipe</th><th>Demande</th><th>Avancement</th><th>Statut</th><th></th></tr></thead><tbody>'
+    +rows.map(function(d){ const stt=demStatut(d); let btn='';
+      if(stt==='En attente Manager') btn+='<button class="btn sm" onclick="drApproveMgr(\''+esc(d.DID)+'\')">Approuver (Manager)</button> ';
+      else if(stt==='En attente RH') btn+='<button class="btn sm" onclick="drApproveRH(\''+esc(d.DID)+'\')">Approuver (RH)</button> <button class="btn sm ghost" onclick="drModifDuree(\''+esc(d.DID)+'\')">Modifier durée</button> <button class="btn sm ghost" onclick="drSendRH(\''+esc(d.DID)+'\')">Envoyer à RH</button> ';
+      if(stt!=='Refusée'&&stt!=='Approuvée') btn+='<button class="btn sm ghost" onclick="drRefuse(\''+esc(d.DID)+'\')">Refuser</button> ';
+      btn+='<button class="btn sm ghost" onclick="drPdf(\''+esc(d.DID)+'\')">Fiche</button> <button class="btn link" onclick="drDelete(\''+esc(d.DID)+'\')">✕</button>';
+      return '<tr><td>'+esc((d.createdAt||'').slice(0,10))+'</td><td>'+esc(d.EmployeID||'')+' — '+esc(d.Nom)+'</td><td>'+esc(eqLabel(d.Equipe))+'</td><td>'+esc(demLabel(d))+'</td><td>'+demProg(d)+'</td><td>'+demBadge(stt)+'</td><td style="white-space:nowrap">'+btn+'</td></tr>'; }).join('')+'</tbody></table></div>'
     : '<div class="empty">Aucune demande.</div>';
 }
 function drFind(id){ return DEM_ALL.find(function(x){return x.DID===id;}); }
-function drApprove(id){ const d=drFind(id); if(!d)return; d.Statut='Approuvée'; d.approvedAt=new Date().toISOString();
-  api('saveDemande',{password:ADMIN_PWD,rec:d}).then(function(){ toast('Approuvée ✔ — appliquée au pointage','ok'); drRender(); drPdf(id); }).catch(function(e){toast(e.message,'err');}); }
+function drApproveMgr(id){ const d=drFind(id); if(!d)return; const c=prompt('Code Manager V2 ('+APPR_MGR.nom+') :'); if(c===null)return; if(c!==APPR_MGR.code){toast('Code incorrect','err');return;}
+  d.apprMgr={by:APPR_MGR.nom,at:new Date().toISOString()}; d.Statut=demStatut(d);
+  api('saveDemande',{password:ADMIN_PWD,rec:d}).then(function(){ toast('Approuvé Manager ✔ — à envoyer à RH','ok'); drRender(); }).catch(function(e){toast(e.message,'err');}); }
+function drApproveRH(id){ const d=drFind(id); if(!d)return; const c=prompt('Code RH ('+APPR_RH.nom+') :'); if(c===null)return; if(c!==APPR_RH.code){toast('Code incorrect','err');return;}
+  d.apprRH={by:APPR_RH.nom,at:new Date().toISOString()}; d.Statut='Approuvée';
+  api('saveDemande',{password:ADMIN_PWD,rec:d}).then(function(){ toast('Approuvé RH ✔ — appliqué au pointage','ok'); drRender(); drPdf(id); }).catch(function(e){toast(e.message,'err');}); }
+function drModifDuree(id){ const d=drFind(id); if(!d)return;
+  if(d.Type==='Conge'){ const du=prompt('Nouveau début (AAAA-MM-JJ) :',isoD(d.DateDebut)); if(du===null)return; const au=prompt('Nouvelle fin (AAAA-MM-JJ) :',isoD(d.DateFin)); if(au===null)return; d.DateDebut=du; d.DateFin=au; }
+  else { const dt=prompt('Date (AAAA-MM-JJ) :',isoD(d.Date)); if(dt===null)return; const h1=prompt('Heure sortie :',d.HeureSortie||''); if(h1===null)return; const h2=prompt('Heure retour (vide=sans) :',d.HeureRetour||''); if(h2===null)return; d.Date=dt; d.HeureSortie=h1; d.HeureRetour=h2; }
+  api('saveDemande',{password:ADMIN_PWD,rec:d}).then(function(){ toast('Durée modifiée ✔','ok'); drRender(); }).catch(function(e){toast(e.message,'err');}); }
+function drSendRH(id){ const d=drFind(id); if(!d)return; const url=location.origin+location.pathname;
+  const txt='Demande '+(d.Type==='Conge'?'de congé':'d\'autorisation')+' — '+d.Nom+' ('+(d.EmployeID||'')+')\n'+demLabel(d)+'\nApprouvée Manager : '+(d.apprMgr?d.apprMgr.by:'')+'\nÀ approuver par RH : '+url+' (Gestion RH ▸ Demandes, code RH)';
+  window.open('https://wa.me/?text='+encodeURIComponent(txt),'_blank'); }
 function drRefuse(id){ const d=drFind(id); if(!d)return; if(!confirm('Refuser cette demande ?'))return; d.Statut='Refusée';
   api('saveDemande',{password:ADMIN_PWD,rec:d}).then(function(){ toast('Refusée','ok'); drRender(); }).catch(function(e){toast(e.message,'err');}); }
 function drDelete(id){ const d=drFind(id); if(!d)return; if(!confirm('Supprimer cette demande ?'))return;
@@ -3008,10 +3027,11 @@ function drPdf(id){ const d=drFind(id); if(!d)return; const J=window.jspdf; if(!
   if(d.Type==='Conge'){ doc.text('Période : du '+isoD(d.DateDebut)+' au '+isoD(d.DateFin),14,y); y+=8; }
   else { doc.text('Date : '+isoD(d.Date)+'    Sortie : '+(d.HeureSortie||'—')+'    Retour : '+(d.HeureRetour||'sans retour'),14,y); y+=8; }
   if(d.Motif){ doc.text('Motif : '+d.Motif,14,y); y+=8; }
-  doc.text('Statut : '+d.Statut,14,y); y+=14;
-  doc.text('Signature opérateur',16,y+18); doc.rect(14,y,60,16);
-  doc.text('Signature responsable',120,y+18); doc.rect(118,y,70,16);
-  doc.setFontSize(7);doc.setTextColor(140);doc.text(d.DID||'',196,142,{align:'right'});
+  doc.text('Statut : '+demStatut(d),14,y); y+=10;
+  doc.setFont(undefined,'bold'); doc.text('Approbations (signatures électroniques par code)',14,y); y+=7; doc.setFont(undefined,'normal'); doc.setFontSize(10);
+  const ap=function(lbl,a){ doc.text('• '+lbl+' : '+(a?(a.by+'   ✔ '+(a.at||'').slice(0,16).replace('T',' ')):'— en attente'),16,y); y+=6.5; };
+  ap('Approuvé Team Leader', d.apprTL); ap('Approuvé Manager V2', d.apprMgr); ap('Approuvé RH', d.apprRH);
+  doc.setFontSize(7);doc.setTextColor(140);doc.text((d.DID||'')+'  ·  Valorise Maroc',196,142,{align:'right'});
   doc.save((d.Type==='Conge'?'Conge_':'Autorisation_')+(d.Nom||'')+'.pdf'); }
 /* application auto au pointage : statut par défaut selon demande approuvée */
 function demForDate(empId, dateStr){ const d=isoD(dateStr); let res=null;
