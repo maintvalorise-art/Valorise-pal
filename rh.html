@@ -1,0 +1,87 @@
+<!doctype html><html lang="fr"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Approbation RH — Valorise Maroc</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root{--green:#164a34;--pine:#0d2c1f;--gold:#C98A3A;--line:#e3e8e4;--muted:#6b7d72;--danger:#b23b32}
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,Segoe UI,Roboto,sans-serif;background:linear-gradient(135deg,#0d2c1f,#164a34);min-height:100vh;display:flex;align-items:center;justify-content:center;padding:18px;color:#132}
+.card{background:#fff;border-radius:18px;max-width:460px;width:100%;box-shadow:0 16px 50px rgba(0,0,0,.35);overflow:hidden}
+.hd{background:var(--green);color:#fff;padding:16px 20px}
+.hd .b{font-weight:800;letter-spacing:2px}.hd .b span{color:var(--gold)}
+.hd h1{font-size:16px;margin:6px 0 0;font-weight:600}
+.bd{padding:20px}
+.row{display:flex;justify-content:space-between;gap:10px;padding:7px 0;border-bottom:1px dashed var(--line);font-size:14px}
+.row .k{color:var(--muted)}.row .v{font-weight:600;text-align:right}
+.big{font-size:15px;font-weight:700;color:var(--green);margin:10px 0 4px}
+.appr{font-size:12.5px;color:#456;margin-top:8px;line-height:1.7}
+.appr b{color:var(--green)}
+label{display:block;font-size:13px;margin:14px 0 4px;color:#456}
+input{width:100%;padding:11px;border:1px solid var(--line);border-radius:10px;font-size:16px;text-align:center;letter-spacing:3px}
+.btns{display:flex;gap:10px;margin-top:14px}
+button{flex:1;padding:12px;border:0;border-radius:10px;font-weight:700;font-size:15px;cursor:pointer}
+.ok{background:var(--green);color:#fff}.no{background:#f3e6e5;color:var(--danger)}
+.msg{text-align:center;margin-top:12px;font-size:14px;min-height:20px}
+.state{text-align:center;padding:30px 20px;color:var(--muted)}
+.badge{display:inline-block;padding:3px 12px;border-radius:14px;color:#fff;font-size:12px}
+.foot{text-align:center;color:var(--muted);font-size:11px;padding:10px}
+</style></head><body>
+<div class="card">
+  <div class="hd"><div class="b">VALORISE <span>MAROC</span></div><h1>Approbation RH — demande</h1></div>
+  <div class="bd" id="bd"><div class="state">Chargement…</div></div>
+  <div class="foot" id="foot"></div>
+</div>
+<script>
+const SUPA_URL="https://ahabpevziommeqmaesli.supabase.co";
+const SUPA_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFoYWJwZXZ6aW9tbWVxbWFlc2xpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg1MTI5NjUsImV4cCI6MjEwNDA4ODk2NX0.E__vx0LLcj9AKRyu08PQS4vqodceD5EajKqWrQMWZ4E";
+const RH={nom:'Farah El Guebassi', code:'1357'};
+const SB=window.supabase.createClient(SUPA_URL,SUPA_KEY);
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+function isoD(v){ if(!v)return''; const s=String(v); const m=s.match(/^(\d{4})-(\d{2})-(\d{2})/); return m?m[0]:s.slice(0,10); }
+function qs(k){ return new URLSearchParams(location.search).get(k); }
+let D=null, DID=qs('id');
+function stat(d){ if(d.Statut==='Refusée')return'Refusée'; if(d.apprRH)return'Approuvée'; if(d.apprMgr)return'En attente RH'; return'En attente Manager'; }
+function label(d){ return d.Type==='Conge'?('Congé du '+isoD(d.DateDebut)+' au '+isoD(d.DateFin)):('Autorisation le '+isoD(d.Date)+' — sortie '+(d.HeureSortie||'—')+(d.HeureRetour?(' → retour '+d.HeureRetour):' (sans retour)')); }
+async function load(){
+  if(!DID){ document.getElementById('bd').innerHTML='<div class="state">Lien invalide (aucune demande).</div>'; return; }
+  document.getElementById('foot').textContent=DID;
+  const {data,error}=await SB.from('kv').select('doc').eq('collection','demandes').eq('id',DID).maybeSingle();
+  if(error){ document.getElementById('bd').innerHTML='<div class="state">Erreur : '+esc(error.message)+'</div>'; return; }
+  if(!data){ document.getElementById('bd').innerHTML='<div class="state">Demande introuvable.</div>'; return; }
+  D=data.doc; render();
+}
+function render(){
+  const s=stat(D); const c=s==='Approuvée'?'#2e7d55':(s==='Refusée'?'#b23b32':'#C98A3A');
+  let h='<div class="big">'+(D.Type==='Conge'?'Demande de congé':'Autorisation de sortie')+'</div>';
+  h+='<div class="row"><span class="k">Opérateur</span><span class="v">'+esc(D.Nom)+'</span></div>';
+  h+='<div class="row"><span class="k">Matricule</span><span class="v">'+esc(D.EmployeID)+'</span></div>';
+  h+='<div class="row"><span class="k">Équipe / Chef</span><span class="v">'+esc(D.Equipe)+' · '+esc(D.Chef)+'</span></div>';
+  h+='<div class="row"><span class="k">Détail</span><span class="v">'+esc(label(D))+'</span></div>';
+  if(D.Motif) h+='<div class="row"><span class="k">Motif</span><span class="v">'+esc(D.Motif)+'</span></div>';
+  h+='<div class="row"><span class="k">Statut</span><span class="v"><span class="badge" style="background:'+c+'">'+s+'</span></span></div>';
+  h+='<div class="appr">Approbations :<br>• Team Leader : <b>'+(D.apprTL?esc(D.apprTL.by)+' ✔':'—')+'</b><br>• Manager V2 : <b>'+(D.apprMgr?esc(D.apprMgr.by)+' ✔':'—')+'</b><br>• RH : <b>'+(D.apprRH?esc(D.apprRH.by)+' ✔':'—')+'</b></div>';
+  if(s==='Approuvée'){ h+='<div class="msg" style="color:#2e7d55">✔ Déjà approuvée par RH.</div>'; }
+  else if(s==='Refusée'){ h+='<div class="msg" style="color:#b23b32">Demande refusée.</div>'; }
+  else if(s==='En attente Manager'){ h+='<div class="msg" style="color:#C98A3A">En attente de l\'approbation Manager avant RH.</div>'; }
+  else {
+    h+='<label>Code RH ('+esc(RH.nom)+')</label><input id="code" type="password" inputmode="numeric" placeholder="••••" onkeydown="if(event.key===\'Enter\')approve()">';
+    h+='<div class="btns"><button class="ok" onclick="approve()">Approuver</button><button class="no" onclick="refuse()">Refuser</button></div>';
+    h+='<div class="msg" id="msg"></div>';
+  }
+  document.getElementById('bd').innerHTML=h;
+}
+async function save(){ const {error}=await SB.from('kv').upsert({collection:'demandes',id:DID,doc:D,updated_at:new Date().toISOString()}); if(error)throw new Error(error.message); }
+async function approve(){ const code=document.getElementById('code').value; const msg=document.getElementById('msg');
+  if(code!==RH.code){ msg.style.color='#b23b32'; msg.textContent='Code incorrect'; return; }
+  msg.style.color='#456'; msg.textContent='Enregistrement…';
+  D.apprRH={by:RH.nom,at:new Date().toISOString()}; D.Statut='Approuvée';
+  try{ await save(); render(); }catch(e){ msg.style.color='#b23b32'; msg.textContent='Erreur : '+e.message; }
+}
+async function refuse(){ const code=document.getElementById('code').value; const msg=document.getElementById('msg');
+  if(code!==RH.code){ msg.style.color='#b23b32'; msg.textContent='Code incorrect'; return; }
+  if(!confirm('Refuser cette demande ?'))return;
+  D.Statut='Refusée'; try{ await save(); render(); }catch(e){ msg.style.color='#b23b32'; msg.textContent='Erreur : '+e.message; }
+}
+load();
+</script>
+</body></html>
