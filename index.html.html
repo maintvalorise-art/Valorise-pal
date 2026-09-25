@@ -1194,7 +1194,7 @@ tr.alert td{background:var(--danger-soft)}
   </section>
 </main>
 
-<div class="foot">Valorise — outil interne · <b>version 8.1-SUPABASE · 03-01 · demandes 3 niveaux</b> · <span id="userTag2"></span></div>
+<div class="foot">Valorise — outil interne · <b>version 8.2-SUPABASE · 03-01 · page RH independante</b> · <span id="userTag2"></span></div>
 </div><!-- /appWrap -->
 <div class="toast" id="toast"></div>
 
@@ -3011,9 +3011,12 @@ function drModifDuree(id){ const d=drFind(id); if(!d)return;
   if(d.Type==='Conge'){ const du=prompt('Nouveau début (AAAA-MM-JJ) :',isoD(d.DateDebut)); if(du===null)return; const au=prompt('Nouvelle fin (AAAA-MM-JJ) :',isoD(d.DateFin)); if(au===null)return; d.DateDebut=du; d.DateFin=au; }
   else { const dt=prompt('Date (AAAA-MM-JJ) :',isoD(d.Date)); if(dt===null)return; const h1=prompt('Heure sortie :',d.HeureSortie||''); if(h1===null)return; const h2=prompt('Heure retour (vide=sans) :',d.HeureRetour||''); if(h2===null)return; d.Date=dt; d.HeureSortie=h1; d.HeureRetour=h2; }
   api('saveDemande',{password:ADMIN_PWD,rec:d}).then(function(){ toast('Durée modifiée ✔','ok'); drRender(); }).catch(function(e){toast(e.message,'err');}); }
-function drSendRH(id){ const d=drFind(id); if(!d)return; const url=location.origin+location.pathname;
-  const txt='Demande '+(d.Type==='Conge'?'de congé':'d\'autorisation')+' — '+d.Nom+' ('+(d.EmployeID||'')+')\n'+demLabel(d)+'\nApprouvée Manager : '+(d.apprMgr?d.apprMgr.by:'')+'\nÀ approuver par RH : '+url+' (Gestion RH ▸ Demandes, code RH)';
-  window.open('https://wa.me/?text='+encodeURIComponent(txt),'_blank'); }
+function drSendRH(id){ const d=drFind(id); if(!d)return;
+  const base=location.origin+location.pathname.replace(/[^\/]*$/,'');
+  const url=base+'rh.html?id='+encodeURIComponent(id);
+  const txt='Demande '+(d.Type==='Conge'?'de congé':'d\'autorisation')+' — '+d.Nom+' ('+(d.EmployeID||'')+')\n'+demLabel(d)+'\nApprouvée Manager : '+(d.apprMgr?d.apprMgr.by:'')+'\n\n👉 Approbation RH (code) : '+url;
+  if(navigator.share){ navigator.share({title:'Approbation RH',text:txt}).catch(function(){ window.open('https://wa.me/?text='+encodeURIComponent(txt),'_blank'); }); }
+  else window.open('https://wa.me/?text='+encodeURIComponent(txt),'_blank'); }
 function drRefuse(id){ const d=drFind(id); if(!d)return; if(!confirm('Refuser cette demande ?'))return; d.Statut='Refusée';
   api('saveDemande',{password:ADMIN_PWD,rec:d}).then(function(){ toast('Refusée','ok'); drRender(); }).catch(function(e){toast(e.message,'err');}); }
 function drDelete(id){ const d=drFind(id); if(!d)return; if(!confirm('Supprimer cette demande ?'))return;
