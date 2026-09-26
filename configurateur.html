@@ -518,7 +518,7 @@ dialog p{font-size:.85rem;color:var(--muted);margin:0 0 14px}
     const BR = Math.max(2, c.blockRows | 0);
     const parts = [];
     const zsRun = spread(R, W, c.runnerW);          // semelles (le long de W)
-    const zsBlk = spread(BR, W, c.blockW);          // dés : BR rangées le long de W
+    const zsBlk = (R <= 3) ? zsRun.slice() : [zsRun[0], zsRun[Math.round((R - 1) / 2)], zsRun[R - 1]]; // dés alignés sur les semelles (bords + centre)
     const xs = spread(C, L, Math.max(c.blockL, c.travW)); // colonnes le long de L (dés + traverses)
     const y0 = 0, y1 = (cover ? 0 : c.runnerT), y2 = y1 + (cover ? 0 : c.blockH), y3 = y2 + c.travT, H = y3 + c.topT;
     if (!cover) {
@@ -535,12 +535,12 @@ dialog p{font-size:.85rem;color:var(--muted);margin:0 0 14px}
     const bom = [
       { key: 'top', qty: n, l: topLen, w: c.topW, t: c.topT },
       { key: 'trav', qty: C, l: beamLen, w: c.travW, t: c.travT },
-      { key: 'block', qty: (cover ? 0 : C * BR), l: c.blockL, w: c.blockW, t: c.blockH },
+      { key: 'block', qty: (cover ? 0 : C * zsBlk.length), l: c.blockL, w: c.blockW, t: c.blockH },
       { key: 'runner', qty: (cover ? 0 : R), l: runLen, w: c.runnerW, t: c.runnerT }
     ].filter(b => b.qty > 0).map(b => Object.assign(b, { volU: vol(b.l, b.w, b.t), volT: vol(b.l, b.w, b.t) * b.qty }));
     const volume = bom.reduce((s, b) => s + b.volT, 0);
     const midX = xs[Math.floor(xs.length / 2)];
-    return { cfg: c, L, W, H, kind: c.kind, deck: c.deck, topN: n, runners: R, blockCols: C, blocks: (c.type==='cover'?0:C*Math.max(2,c.blockRows|0)), cover: c.type==='cover', parts, bom, volume, warn,
+    return { cfg: c, L, W, H, kind: c.kind, deck: c.deck, topN: n, runners: R, blockCols: C, blocks: (c.type==='cover'?0:C*zsBlk.length), cover: c.type==='cover', parts, bom, volume, warn,
       stamp: { x: midX, y: y1 + c.blockH / 2, z: W / 2, w: c.blockL, h: c.blockH } };
   }
   window.PalletModel = { DEFAULTS, compute, autoTop };
@@ -855,6 +855,40 @@ const VM_CONFIG = {
      'Assemblage cloué ; clous enfoncés et non saillants.',
      'Tolérance : longueur ± 3 mm, épaisseur + 1 mm.'].forEach(t => { doc.text('• ' + t, 16, yy); yy += 5; });
     doc.setFontSize(7); doc.setTextColor(140); doc.text('Valorise Maroc · Zone Franche Tanger · ' + new Date().toISOString().slice(0,10), 196, 290, { align: 'right' });
+    // ---------- PAGE 2 : PLAN COTE ----------
+    doc.addPage();
+    doc.setFillColor(22, 74, 52); doc.rect(0, 0, 210, 20, 'F');
+    doc.setTextColor(255); doc.setFont(undefined, 'bold'); doc.setFontSize(15);
+    doc.text('PLAN TECHNIQUE COTE', 14, 13);
+    doc.setTextColor(20); doc.setFont(undefined, 'normal'); doc.setFontSize(10);
+    doc.text(ref + '  -  ' + model.L + ' x ' + model.W + ' x H' + Math.round(model.H) + ' mm', 14, 28);
+    var cc = model.cfg;
+    var ox = 24, oy = 42, maxW = 150, maxH = 90;
+    var sc = Math.min(maxW / model.L, maxH / model.W);
+    var pw = model.L * sc, ph = model.W * sc;
+    doc.setDrawColor(60); doc.setLineWidth(0.3);
+    doc.setFont(undefined, 'bold'); doc.setFontSize(9); doc.text('Vue de dessus', ox, oy - 3); doc.setFont(undefined, 'normal');
+    doc.rect(ox, oy, pw, ph);
+    var nTop = model.topN, tw = cc.topW * sc;
+    for (var i = 0; i < nTop; i++) { var zc = (nTop <= 1) ? (oy + ph/2) : (oy + tw/2 + i * (ph - tw) / (nTop - 1)); doc.setFillColor(222, 184, 135); doc.rect(ox, zc - tw/2, pw, tw, 'FD'); }
+    doc.setDrawColor(150); doc.setFontSize(8);
+    doc.line(ox, oy + ph + 6, ox + pw, oy + ph + 6); doc.text(model.L + ' mm', ox + pw/2, oy + ph + 11, { align: 'center' });
+    doc.line(ox - 6, oy, ox - 6, oy + ph); doc.text(model.W + ' mm', ox - 9, oy + ph/2, { align: 'center', angle: 90 });
+    var sx = ox + pw + 24, sy = oy;
+    doc.setFont(undefined, 'bold'); doc.setFontSize(9); doc.setTextColor(20); doc.text('Coupe (cote)', sx, oy - 3); doc.setFont(undefined, 'normal'); doc.setDrawColor(60);
+    var hsc = maxH / model.H, Lp = Math.min(58, 210 - sx - 16);
+    var yTop = sy, yTopB = yTop + cc.topT * hsc, yBeamB = yTopB + cc.travT * hsc;
+    var yBlkB = yBeamB + (model.cover ? 0 : cc.blockH * hsc), yRunB = yBlkB + (model.cover ? 0 : cc.runnerT * hsc);
+    doc.setFillColor(222,184,135); doc.rect(sx, yTop, Lp, cc.topT*hsc, 'FD');
+    doc.rect(sx, yTopB, Lp, cc.travT*hsc, 'FD');
+    if (!model.cover) { var bw = Math.max(4, cc.blockL * hsc); [0, 0.5, 1].forEach(function(f){ var bx = sx + f * (Lp - bw); doc.setFillColor(150,110,60); doc.rect(bx, yBeamB, bw, cc.blockH*hsc, 'FD'); }); doc.setFillColor(222,184,135); doc.rect(sx, yBlkB, Lp, cc.runnerT*hsc, 'FD'); }
+    doc.setDrawColor(150); doc.setFontSize(8); doc.setTextColor(20);
+    doc.line(sx + Lp + 6, yTop, sx + Lp + 6, yRunB); doc.text('H ' + Math.round(model.H), sx + Lp + 9, (yTop+yRunB)/2, { align: 'center', angle: 90 });
+    doc.setDrawColor(60); doc.autoTable({ startY: oy + ph + 20,
+      head: [['Rep.', 'Composant', 'L x l x E (mm)', 'Qte']],
+      body: model.bom.map(function(b, i){ return [String(i+1), LBLBOM[b.key] || b.key, b.l + ' x ' + b.w + ' x ' + b.t, b.qty]; }),
+      styles: { fontSize: 8 }, headStyles: { fillColor: [46, 125, 85] } });
+    doc.setFontSize(7); doc.setTextColor(140); doc.text('Plan indicatif non contractuel · Valorise Maroc · MA-3483 HT', 196, 290, { align: 'right' });
     doc.save('Fiche_technique_' + ref.replace(/[^\w-]+/g, '_') + '.pdf');
   }
   { const bf = $('#do-fiche'); if (bf) bf.addEventListener('click', ficheTech); }
