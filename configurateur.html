@@ -118,6 +118,8 @@ dialog p{font-size:.85rem;color:var(--muted);margin:0 0 14px}
   #print tr{page-break-inside:avoid}
 }
 </style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
 </head>
 <body>
 
@@ -149,6 +151,7 @@ dialog p{font-size:.85rem;color:var(--muted);margin:0 0 14px}
         <div class="f"><label for="p-W">Largeur (mm)</label><input id="p-W" type="number" min="300" max="3000" step="10"></div>
         <div class="f"><label>Plancher</label><div class="seg" id="seg-deck"><button type="button" data-v="closed">Fermé</button><button type="button" data-v="open">Ouvert</button></div></div>
         <div class="f"><label>Bois</label><div class="seg" id="seg-kind"><button type="button" data-v="new">Neuf</button><button type="button" data-v="recycled">Recyclé</button></div></div>
+        <div class="f"><label>Type</label><div class="seg" id="seg-type"><button type="button" data-v="pallet">Palette</button><button type="button" data-v="cover">Couvercle</button></div></div>
       </div>
       <p class="lock" id="lock-note">Palette standard : 3 semelles, 9 dés, planches 100 × 22 mm. Choisissez « Sur mesure » pour tout modifier.</p>
 
@@ -181,6 +184,12 @@ dialog p{font-size:.85rem;color:var(--muted);margin:0 0 14px}
       <div class="grid3">
         <div class="f"><label>Nombre</label><div class="seg" id="seg-run"><button type="button" data-v="3" data-adv>3</button><button type="button" data-v="5" data-adv>5</button></div></div>
         <div class="f"><label>Sens semelles</label><div class="seg" id="seg-rundir"><button type="button" data-v="L" data-adv>Longueur</button><button type="button" data-v="W" data-adv>Largeur</button></div></div>
+      </div>
+      <div class="sub">Calcul m³ (chute incluse)</div>
+      <label class="chk" style="margin-top:6px"><input type="checkbox" id="p-useBuy"> Calculer le m³ sur des longueurs d'achat (bois acheté plus long)</label>
+      <div class="grid2" style="margin-top:6px">
+        <div class="f"><label for="p-buyTop">Long. achat planches (mm)</label><input id="p-buyTop" type="number" min="0" step="10" placeholder="ex. 1200"></div>
+        <div class="f"><label for="p-buyBeam">Long. achat semelles/traverses (mm)</label><input id="p-buyBeam" type="number" min="0" step="10" placeholder="ex. 1200"></div>
         <div class="f"><label for="p-rW">Largeur</label><input id="p-rW" type="number" min="50" max="200" step="1" data-adv></div>
         <div class="f"><label for="p-rT">Épaisseur</label><input id="p-rT" type="number" min="10" max="60" step="1" data-adv></div>
       </div>
@@ -261,6 +270,7 @@ dialog p{font-size:.85rem;color:var(--muted);margin:0 0 14px}
 
     <div class="actions">
       <button class="btn primary" type="button" id="do-print">Imprimer / PDF</button>
+      <button class="btn" type="button" id="do-fiche">Fiche technique (PDF)</button>
       <button class="btn" type="button" id="do-mail">Envoyer par e-mail</button>
       <button class="btn" type="button" id="do-wa">WhatsApp</button>
       <button class="btn line" type="button" id="do-json">Export JSON (système)</button>
@@ -482,11 +492,12 @@ dialog p{font-size:.85rem;color:var(--muted);margin:0 0 14px}
   /* ================= MODÈLE PALETTE (mm) =================
      Structure : semelles (dessous, sens longueur) → dés → traverses (sens largeur) → planches de dessus (sens longueur) */
   const DEFAULTS = {
-    L: 1200, W: 1000, deck: 'closed', kind: 'new',
+    L: 1200, W: 1000, deck: 'closed', kind: 'new', type: 'pallet',
     runners: 3, runnerW: 100, runnerT: 22, runnerDir: 'L', // semelles
-    blockCols: 3, blockL: 100, blockW: 100, blockH: 78, // dés : colonnes sur la longueur, rangées = nb semelles
+    blockCols: 3, blockRows: 3, blockL: 100, blockW: 100, blockH: 78, // dés : 3 x 3 standard
     travW: 100, travT: 22,                            // traverses
-    topN: 0, topW: 100, topT: 22                      // planches dessus (0 = auto)
+    topN: 0, topW: 100, topT: 22,                     // planches dessus (0 = auto)
+    useBuy: false, buyTop: 0, buyBeam: 0              // m3 sur longueur d'achat (chute incluse)
   };
   function autoTop(W, pw, deck) {
     if (deck === 'closed') return Math.max(3, Math.round((W + 15) / (pw + 18)));
@@ -503,23 +514,33 @@ dialog p{font-size:.85rem;color:var(--muted);margin:0 0 14px}
     if (n > maxTop) { warn.push('top'); n = maxTop; }
     if (R * c.runnerW > (c.runnerDir==='W'?L:W)) warn.push('runners');
     if (C * c.blockL > L) warn.push('blocks');
-    const parts = [], zs = spread(R, W, Math.max(c.runnerW, c.blockW)), xs = spread(C, L, Math.max(c.blockL, c.travW));
-    const y0 = 0, y1 = c.runnerT, y2 = y1 + c.blockH, y3 = y2 + c.travT, H = y3 + c.topT;
-    if (c.runnerDir === 'W') { const xr = spread(R, L, Math.max(c.runnerW, c.blockL)); xr.forEach(x => parts.push({ key: 'runner', dx: c.runnerW, dy: c.runnerT, dz: W, x, y: y0 + c.runnerT / 2, z: 0, stage: 0 })); }
-    else { zs.forEach(z => parts.push({ key: 'runner', dx: L, dy: c.runnerT, dz: c.runnerW, x: 0, y: y0 + c.runnerT / 2, z, stage: 0 })); }
-    xs.forEach(x => zs.forEach(z => parts.push({ key: 'block', dx: c.blockL, dy: c.blockH, dz: c.blockW, x, y: y1 + c.blockH / 2, z, stage: 1 })));
+    const cover = c.type === 'cover';
+    const BR = Math.max(2, c.blockRows | 0);
+    const parts = [];
+    const zsRun = spread(R, W, c.runnerW);          // semelles (le long de W)
+    const zsBlk = spread(BR, W, c.blockW);          // dés : BR rangées le long de W
+    const xs = spread(C, L, Math.max(c.blockL, c.travW)); // colonnes le long de L (dés + traverses)
+    const y0 = 0, y1 = (cover ? 0 : c.runnerT), y2 = y1 + (cover ? 0 : c.blockH), y3 = y2 + c.travT, H = y3 + c.topT;
+    if (!cover) {
+      if (c.runnerDir === 'W') { const xr = spread(R, L, Math.max(c.runnerW, c.blockL)); xr.forEach(x => parts.push({ key: 'runner', dx: c.runnerW, dy: c.runnerT, dz: W, x, y: y0 + c.runnerT / 2, z: 0, stage: 0 })); }
+      else { zsRun.forEach(z => parts.push({ key: 'runner', dx: L, dy: c.runnerT, dz: c.runnerW, x: 0, y: y0 + c.runnerT / 2, z, stage: 0 })); }
+      xs.forEach(x => zsBlk.forEach(z => parts.push({ key: 'block', dx: c.blockL, dy: c.blockH, dz: c.blockW, x, y: y1 + c.blockH / 2, z, stage: 1 })));
+    }
     xs.forEach(x => parts.push({ key: 'trav', dx: c.travW, dy: c.travT, dz: W, x, y: y2 + c.travT / 2, z: 0, stage: 2 }));
     spread(n, W, c.topW).forEach(z => parts.push({ key: 'top', dx: L, dy: c.topT, dz: c.topW, x: 0, y: y3 + c.topT / 2, z, stage: 3 }));
     const vol = (a, b, d) => a * b * d / 1e9;
+    const topLen  = (c.useBuy && c.buyTop  > 0) ? c.buyTop  : L;
+    const beamLen = (c.useBuy && c.buyBeam > 0) ? c.buyBeam : W;
+    const runLen  = (c.useBuy && c.buyBeam > 0) ? c.buyBeam : (c.runnerDir === 'W' ? W : L);
     const bom = [
-      { key: 'top', qty: n, l: L, w: c.topW, t: c.topT },
-      { key: 'trav', qty: C, l: W, w: c.travW, t: c.travT },
-      { key: 'block', qty: R * C, l: c.blockL, w: c.blockW, t: c.blockH },
-      { key: 'runner', qty: R, l: (c.runnerDir==='W'?W:L), w: c.runnerW, t: c.runnerT }
-    ].map(b => Object.assign(b, { volU: vol(b.l, b.w, b.t), volT: vol(b.l, b.w, b.t) * b.qty }));
+      { key: 'top', qty: n, l: topLen, w: c.topW, t: c.topT },
+      { key: 'trav', qty: C, l: beamLen, w: c.travW, t: c.travT },
+      { key: 'block', qty: (cover ? 0 : C * BR), l: c.blockL, w: c.blockW, t: c.blockH },
+      { key: 'runner', qty: (cover ? 0 : R), l: runLen, w: c.runnerW, t: c.runnerT }
+    ].filter(b => b.qty > 0).map(b => Object.assign(b, { volU: vol(b.l, b.w, b.t), volT: vol(b.l, b.w, b.t) * b.qty }));
     const volume = bom.reduce((s, b) => s + b.volT, 0);
     const midX = xs[Math.floor(xs.length / 2)];
-    return { cfg: c, L, W, H, kind: c.kind, deck: c.deck, topN: n, runners: R, blockCols: C, blocks: R * C, parts, bom, volume, warn,
+    return { cfg: c, L, W, H, kind: c.kind, deck: c.deck, topN: n, runners: R, blockCols: C, blocks: (c.type==='cover'?0:C*Math.max(2,c.blockRows|0)), cover: c.type==='cover', parts, bom, volume, warn,
       stamp: { x: midX, y: y1 + c.blockH / 2, z: W / 2, w: c.blockL, h: c.blockH } };
   }
   window.PalletModel = { DEFAULTS, compute, autoTop };
@@ -567,7 +588,7 @@ const VM_CONFIG = {
   const p3d = window.THREE ? new window.Pallet3D(stage, { preserve: true }) : null;
   if (!window.THREE || (p3d && !p3d.ok)) stage.classList.add('no-gl');
 
-  const FIELDS = { L: 'p-L', W: 'p-W', topN: 'p-topN', topW: 'p-topW', topT: 'p-topT', travW: 'p-travW', travT: 'p-travT', blockCols: 'p-cols', blockL: 'p-bL', blockW: 'p-bW', blockH: 'p-bH', runnerW: 'p-rW', runnerT: 'p-rT' };
+  const FIELDS = { L: 'p-L', W: 'p-W', topN: 'p-topN', topW: 'p-topW', topT: 'p-topT', travW: 'p-travW', travT: 'p-travT', blockCols: 'p-cols', blockL: 'p-bL', blockW: 'p-bW', blockH: 'p-bH', runnerW: 'p-rW', runnerT: 'p-rT', buyTop: 'p-buyTop', buyBeam: 'p-buyBeam' };
 
   function segSet(id, v) { $$(`#${id} button`).forEach(b => b.setAttribute('aria-pressed', String(b.dataset.v === String(v)))); }
   function writeForm() {
@@ -575,7 +596,7 @@ const VM_CONFIG = {
     $('#p-ref').value = cfg.ref || '';
     Object.entries(FIELDS).forEach(([k, id]) => { if (k !== 'topN') $('#' + id).value = cfg[k]; });
     $('#p-topAuto').checked = !(cfg.topN > 0);
-    segSet('seg-deck', cfg.deck); segSet('seg-kind', cfg.kind); segSet('seg-run', cfg.runners); segSet('seg-rundir', cfg.runnerDir);
+    segSet('seg-deck', cfg.deck); segSet('seg-kind', cfg.kind); segSet('seg-run', cfg.runners); segSet('seg-rundir', cfg.runnerDir); segSet('seg-type', cfg.type||'pallet'); { const ub=$('#p-useBuy'); if(ub) ub.checked=!!cfg.useBuy; if($('#p-buyTop'))$('#p-buyTop').value=cfg.buyTop||''; if($('#p-buyBeam'))$('#p-buyBeam').value=cfg.buyBeam||''; }
     const custom = cfg.fmt === 'custom';
     $$('[data-adv]').forEach(el => el.disabled = !custom);
     $('#p-L').disabled = $('#p-W').disabled = !custom;
@@ -589,6 +610,7 @@ const VM_CONFIG = {
     });
     cfg.ref = $('#p-ref').value.trim();
     cfg.topN = $('#p-topAuto').checked ? 0 : (parseInt($('#p-topN').value, 10) || 0);
+    cfg.useBuy = !!($('#p-useBuy') && $('#p-useBuy').checked);
   }
   function setFormat(fmt) {
     const keepDeck = cfg.deck, keepKind = cfg.kind, ref = cfg.ref;
@@ -664,6 +686,8 @@ const VM_CONFIG = {
   $$('#seg-kind button').forEach(b => b.addEventListener('click', () => { cfg.kind = b.dataset.v; segSet('seg-kind', cfg.kind); update(true); }));
   $$('#seg-run button').forEach(b => b.addEventListener('click', () => { cfg.runners = +b.dataset.v; segSet('seg-run', cfg.runners); update(true); }));
   $$('#seg-rundir button').forEach(b => b.addEventListener('click', () => { cfg.runnerDir = b.dataset.v; segSet('seg-rundir', cfg.runnerDir); update(true); }));
+  $$('#seg-type button').forEach(b => b.addEventListener('click', () => { cfg.type = b.dataset.v; segSet('seg-type', cfg.type); update(true); }));
+  { const ub=$('#p-useBuy'); if(ub) ub.addEventListener('change', () => { cfg.useBuy = ub.checked; update(true); }); }
   { const cur=$('#q-cur'); if(cur){ cur.value=VM_CONFIG.currency; cur.addEventListener('change', () => { VM_CONFIG.currency = cur.value; update(true); }); } }
 
   /* ---------- Devis ---------- */
@@ -802,6 +826,38 @@ const VM_CONFIG = {
       transport_ht: +devis.transport, tva_pct: +devis.tva, total_ht: +T.htT.toFixed(2), tva: +T.tva.toFixed(2), total_ttc: +T.ttc.toFixed(2), volume_m3_total: +T.vol.toFixed(4), devise: VM_CONFIG.currency
     };
   }
+    const LBLBOM = { top: 'Planche de dessus', trav: 'Traverse', block: 'Dé (bloc)', runner: 'Semelle' };
+  function ficheTech() {
+    const J = window.jspdf; if (!J || !J.jsPDF) { toast('PDF indisponible'); return; }
+    if (!model) update(true);
+    const c = model.cfg;
+    const img = (p3d && p3d.ok) ? p3d.snapshot(560) : '';
+    const doc = new J.jsPDF({ unit: 'mm', format: 'a4' });
+    doc.setFillColor(22, 74, 52); doc.rect(0, 0, 210, 20, 'F');
+    doc.setTextColor(255); doc.setFont(undefined, 'bold'); doc.setFontSize(15);
+    doc.text('VALORISE MAROC — FICHE TECHNIQUE', 14, 13);
+    doc.setTextColor(20); doc.setFont(undefined, 'normal'); doc.setFontSize(10);
+    const ref = c.ref || (model.cover ? 'Couvercle' : 'Palette') + ' ' + model.L + 'x' + model.W;
+    let y = 28;
+    doc.text('Référence : ' + ref, 14, y); y += 6;
+    doc.text('Type : ' + (model.cover ? 'Couvercle (sans dés ni semelles)' : 'Palette à blocs') + '     Bois : ' + (c.kind === 'recycled' ? 'Recyclé' : 'Neuf'), 14, y); y += 6;
+    doc.text('Dimensions : ' + model.L + ' x ' + model.W + ' mm     Hauteur : ' + Math.round(model.H) + ' mm', 14, y); y += 6;
+    doc.text('Volume bois : ' + m3(model.volume, 4) + ' m³' + (c.useBuy ? '  (m³ calculé sur longueurs d\'achat, chute incluse)' : ''), 14, y); y += 4;
+    if (img) { try { doc.addImage(img, 'JPEG', 118, 24, 78, 60); } catch (e) {} }
+    doc.autoTable({ startY: y + 4, margin: { right: 96 },
+      head: [['Composant', 'L x l x E (mm)', 'Qté', 'm³/u']],
+      body: model.bom.map(b => [LBLBOM[b.key] || b.key, b.l + ' x ' + b.w + ' x ' + b.t, b.qty, m3(b.volU, 5)]),
+      styles: { fontSize: 8 }, headStyles: { fillColor: [46, 125, 85] } });
+    let yy = Math.max(doc.lastAutoTable.finalY, 90) + 8;
+    doc.setFont(undefined, 'bold'); doc.text('Exigences techniques', 14, yy); yy += 6; doc.setFont(undefined, 'normal'); doc.setFontSize(9);
+    ['Bois de pin de qualité, humidité conforme aux exigences IPPC.',
+     'Traitement thermique NIMP 15 / ISPM 15 et marquage (MA-3483 HT).',
+     'Assemblage cloué ; clous enfoncés et non saillants.',
+     'Tolérance : longueur ± 3 mm, épaisseur + 1 mm.'].forEach(t => { doc.text('• ' + t, 16, yy); yy += 5; });
+    doc.setFontSize(7); doc.setTextColor(140); doc.text('Valorise Maroc · Zone Franche Tanger · ' + new Date().toISOString().slice(0,10), 196, 290, { align: 'right' });
+    doc.save('Fiche_technique_' + ref.replace(/[^\w-]+/g, '_') + '.pdf');
+  }
+  { const bf = $('#do-fiche'); if (bf) bf.addEventListener('click', ficheTech); }
   $('#do-json').addEventListener('click', () => download(devis.num + '.json', JSON.stringify(exportData(), null, 2), 'application/json'));
   $('#do-csv').addEventListener('click', () => {
     const q = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
