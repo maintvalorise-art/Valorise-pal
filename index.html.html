@@ -796,6 +796,24 @@ tr.alert td{background:var(--danger-soft)}
     </div>
   </section>
 
+  <!-- ============ INVENTAIRE PHYSIQUE (admin) ============ -->
+  <section class="view" data-view="inventaire">
+    <div class="vhead"><div class="eyebrow">Gestion de Stock</div><h2>Inventaire physique</h2>
+      <p>Saisis les quantités réelles comptées. Le stock est ajusté à ces quantités ; l'ancien état part en historique.</p></div>
+    <div class="admin-body" data-admin="inventaire">
+      <div class="card">
+        <div class="grid g3" style="margin-bottom:10px">
+          <div class="field"><label>Date inventaire</label><input type="date" id="invDate"></div>
+          <div class="field"><label>Recherche réf</label><input id="invSearch" oninput="invFilter()" placeholder="réf ou désignation"></div>
+          <div class="field" style="align-self:end"><button class="btn ghost sm" onclick="initInventaire()">Recharger le stock</button></div>
+        </div>
+        <div id="invBody"><div class="empty">Chargement…</div></div>
+        <button class="btn" style="width:100%;margin-top:10px" onclick="invSave()">Valider l'inventaire (ajuster le stock)</button>
+      </div>
+      <div class="card"><h3>Historique des inventaires</h3><div id="invHist"></div></div>
+    </div>
+  </section>
+
   <!-- ============ BON DE LIVRAISON — REGISTRE ============ -->
   <section class="view" data-view="livreg">
     <div class="vhead"><div class="eyebrow">Livraison</div><h2>Registre</h2>
@@ -1203,7 +1221,7 @@ tr.alert td{background:var(--danger-soft)}
   </section>
 </main>
 
-<div class="foot">Valorise — outil interne · <b>version 8.4-SUPABASE · 03-01 · fiche 1 page</b> · <span id="userTag2"></span></div>
+<div class="foot">Valorise — outil interne · <b>version 8.6-SUPABASE · 03-01 · inventaire physique</b> · <span id="userTag2"></span></div>
 </div><!-- /appWrap -->
 <div class="toast" id="toast"></div>
 
@@ -1292,7 +1310,7 @@ async function sbForgot(){ const em=document.getElementById('lgEmail').value.tri
   if(!em){ msg.textContent='Saisis ton email d\'abord'; return; }
   const {error}=await SB.auth.resetPasswordForEmail(em); msg.textContent=error?('Erreur : '+error.message):'Email de réinitialisation envoyé ✔ (vérifie ta boîte)'; }
 async function sbLogout(){ await SB.auth.signOut(); location.reload(); }
-const WRITE=['saveEmploye','deleteEmploye','saveAffectation','savePlanning','saveAbsence','saveArticle','deleteArticle','saveEntree','saveSortie','saveCommande','saveOrdreProd','saveFiche','deleteFiche','savePoste','deletePoste','saveBom','deleteBom','saveQuotation','setAdminPassword','saveLivraison','savePlanLiv','setBlNext','importLivraisons','updateLivraison','deleteLivraison','clearLivraisons','deleteLivBulk','deleteFicheAbsence','saveTraitement','deleteTraitement','saveCommandesSemaine','saveZ2Mouv','deleteZ2Mouv','saveZ2Article','deleteZ2Article','importZ2','clearZ2','saveNoteTL','saveDemande','deleteDemande','saveContrat'];
+const WRITE=['saveEmploye','deleteEmploye','saveAffectation','savePlanning','saveAbsence','saveArticle','deleteArticle','saveEntree','saveSortie','saveCommande','saveOrdreProd','saveFiche','deleteFiche','savePoste','deletePoste','saveBom','deleteBom','saveQuotation','setAdminPassword','saveLivraison','savePlanLiv','setBlNext','importLivraisons','updateLivraison','deleteLivraison','clearLivraisons','deleteLivBulk','deleteFicheAbsence','saveTraitement','deleteTraitement','saveCommandesSemaine','saveZ2Mouv','deleteZ2Mouv','saveZ2Article','deleteZ2Article','importZ2','clearZ2','saveNoteTL','saveDemande','deleteDemande','saveContrat','saveInventaire'];
 
 async function fb_importLivraisons(p){ const docs=p.docs||[];
   for(var i=0;i<docs.length;i+=400){ const batch=db.batch();
@@ -1370,6 +1388,8 @@ async function route(action,p){
     case 'saveEntree':     return await fb_saveEntree(p);
     case 'saveSortie':     return await fb_saveSortie(p);
     case 'getStock':       return await fb_getStock(p);
+    case 'saveInventaire': return await fb_saveInventaire(p);
+    case 'getInventaires': { const s=await db.collection('inventaires').get(); return {ok:true, rows:s.docs.map(function(d){return d.data();}).sort(function(a,b){return (a.Date<b.Date?1:-1);})}; }
     case 'getMouvements':  { const s=await db.collection('mouvements').where('Date','>=',isoD(p.du)).where('Date','<=',isoD(p.au)).get(); return {ok:true, rows:s.docs.map(function(d){return d.data();})}; }
     case 'saveCommande':   return await fb_saveCommande(p);
     case 'getCommandes':   return await fb_getCommandes(p);
@@ -1521,6 +1541,16 @@ async function fb_getStock(p){
       Stock:stock,StockMin:Number(a.StockMin||0),Alerte:isMP&&Number(a.StockMin||0)>0&&stock<=Number(a.StockMin)}; });
   return {ok:true,rows:rows};
 }
+async function fb_saveInventaire(p){
+  const st=await fb_getStock({}); const cur={}; st.rows.forEach(function(r){ cur[r.Ref]=r.Stock; });
+  const id=uid('INV-'); const date=isoD(p.date)||todayStr(); const batch=db.batch(); const lignes=[];
+  (p.lignes||[]).forEach(function(l){ if(l.reel===''||l.reel==null) return; const ref=String(l.ref); const reel=Number(l.reel); if(isNaN(reel))return;
+    const avant=Number(cur[ref]||0); const ec=reel-avant; lignes.push({ref:ref,designation:l.designation||'',avant:avant,reel:reel,ecart:ec});
+    if(ec!==0){ batch.set(db.collection('mouvements').doc(),{Date:date,Sens:(ec>0?'IN':'OUT'),Famille:l.famille||'',Ref:ref,Designation:l.designation||'',Qte:Math.abs(ec),Source:'INVENTAIRE',NumeroBon:id}); } });
+  batch.set(db.collection('inventaires').doc(id),{id:id,Date:date,lignes:lignes,createdAt:new Date().toISOString()});
+  await batch.commit(); return {ok:true,id:id,n:lignes.length};
+}
+
 async function fb_saveCommande(p){
   const oid=uid('CMD-'); const arts=await fbAll('articles'); const map={}; arts.forEach(function(a){map[a.Ref]=a;});
   const batch=db.batch();
@@ -1613,7 +1643,7 @@ const VIEWS = {
 const MODULES = {
   prod:  {label:'Gestion Prod',     tabs:[['contrat','Contrats'],['suivicmd','Suivi Cmd'],['configpal','Configurateur'],['ordre','Ordre de Prod'],['bom','BOM'],['devis','Devis'],['recapprod','Recap Prod'],['etatprod','État Prod'],['histo','Historique'],['kpi','KPI']]},
   rh:    {label:'Gestion RH',       tabs:[['employes','Employés'],['affect','Affectation'],['postes','Postes'],['matrice','Matrice'],['recap','Recap abs.'],['abshisto','Fiches absence'],['demrh','Demandes'],['notation','Notation'],['transport','Transport']]},
-  stock: {label:'Gestion de Stock', tabs:[['stock','Stock'],['entree','Entrée stock'],['sortie','Sortie stock'],['livnew','Bon Livraison'],['livreg','Registre BL'],['etatbl','État BL'],['planliv','Planning Livraison'],['articles','Articles']]},
+  stock: {label:'Gestion de Stock', tabs:[['stock','Stock'],['entree','Entrée stock'],['sortie','Sortie stock'],['inventaire','Inventaire'],['livnew','Bon Livraison'],['livreg','Registre BL'],['etatbl','État BL'],['planliv','Planning Livraison'],['articles','Articles']]},
   trt:   {label:'Traitement',        tabs:[['trait','Fiche traitement'],['etattrait','État Traitement']]},
   config:{label:'Config',           tabs:[['import','Import Excel'],['reglages','Réglages']]}
 };
@@ -1765,6 +1795,7 @@ function onEnter(v){
   if(v==='histo') initHisto();
   if(v==='etatprod') initEtatProd();
   if(v==='etatbl') initEtatBl();
+  if(v==='inventaire') initInventaire();
   if(v==='etattrait') initEtatTrait();
   if(v==='kpi') initKpi();
   if(v==='postes') renderPostesBase();
@@ -3687,6 +3718,47 @@ function ebPdf(){ if(!EB_LAST.cli.length){toast('Rien à exporter','err');return
   doc.autoTable({startY:31,head:[['Type de palette','Total livré','%']],body:EB_LAST.typ.map(function(x){return [x.Type,x.Qte,(EB_LAST.tot?Math.round(x.Qte/EB_LAST.tot*100):0)+'%'];}),styles:{fontSize:9},headStyles:{fillColor:[46,125,85]}});
   doc.autoTable({startY:doc.lastAutoTable.finalY+6,head:[['Client','Nb bons','Total livré','%']],body:EB_LAST.cli.map(function(x){return [x.Client,x.Bons,x.Qte,(EB_LAST.tot?Math.round(x.Qte/EB_LAST.tot*100):0)+'%'];}),styles:{fontSize:8},headStyles:{fillColor:[46,125,85]}});
   doc.save('Etat_livraisons.pdf'); }
+
+/* ================= INVENTAIRE PHYSIQUE ================= */
+let INV_ROWS=[];
+function initInventaire(){ const el=document.getElementById('invDate'); if(el&&!el.value) el.value=S.today;
+  document.getElementById('invBody').innerHTML='<div class="loading"><span class="spin"></span> …</div>';
+  api('getStock',{}).then(function(r){ INV_ROWS=(r.rows||[]).slice().sort(function(a,b){return String(a.Ref).localeCompare(String(b.Ref));}); invRender(); loadInvHist(); })
+    .catch(function(e){ document.getElementById('invBody').innerHTML='<div class="warnbox">'+esc(e.message)+'</div>'; }); }
+function invRender(){ if(!INV_ROWS.length){ document.getElementById('invBody').innerHTML='<div class="empty">Aucun article.</div>'; return; }
+  let h='<div class="tbl-wrap"><table><thead><tr><th>Réf</th><th>Désignation</th><th>Stock actuel</th><th>Qté réelle</th><th>Écart</th></tr></thead><tbody>';
+  h+=INV_ROWS.map(function(a){ return '<tr data-ref="'+esc(a.Ref)+'"><td><b>'+esc(a.Ref)+'</b></td><td>'+esc(a.Designation||'')+'</td><td class="invCur">'+a.Stock+'</td>'
+    +'<td><input type="number" class="invReel" step="1" value="'+a.Stock+'" oninput="invEcart(this)" style="width:90px"></td>'
+    +'<td class="invEc">0</td></tr>'; }).join('');
+  h+='</tbody></table></div>';
+  document.getElementById('invBody').innerHTML=h;
+}
+function invEcart(el){ const tr=el.closest('tr'); const cur=Number(tr.querySelector('.invCur').textContent||0); const reel=Number(el.value||0); const ec=reel-cur;
+  const c=tr.querySelector('.invEc'); c.textContent=(ec>0?'+':'')+ec; c.style.color= ec===0?'':(ec>0?'#2e7d55':'#b23b32'); c.style.fontWeight= ec===0?'':'700'; }
+function invFilter(){ const q=(document.getElementById('invSearch').value||'').toLowerCase();
+  [].forEach.call(document.querySelectorAll('#invBody tr[data-ref]'),function(tr){ const t=tr.textContent.toLowerCase(); tr.style.display=(!q||t.indexOf(q)>=0)?'':'none'; }); }
+function invSave(){ const date=document.getElementById('invDate').value; if(!date){toast('Date requise','err');return;}
+  const map={}; INV_ROWS.forEach(function(a){map[String(a.Ref)]=a;});
+  const lignes=[]; [].forEach.call(document.querySelectorAll('#invBody tr[data-ref]'),function(tr){ const ref=tr.dataset.ref; const reel=tr.querySelector('.invReel').value; const a=map[ref]||{}; lignes.push({ref:ref,reel:reel,designation:a.Designation||'',famille:a.Famille||''}); });
+  const nEc=lignes.filter(function(l){ return Number(l.reel)!==Number((map[l.ref]||{}).Stock||0); }).length;
+  if(!confirm('Valider l\'inventaire du '+date+' ?\n'+nEc+' article(s) avec écart seront ajustés. Le stock sera mis aux quantités réelles.')) return;
+  toast('Enregistrement…');
+  api('saveInventaire',{password:ADMIN_PWD,date:date,lignes:lignes}).then(function(r){ toast('Inventaire enregistré ✔ ('+(r.n||0)+' lignes)','ok'); initInventaire(); }).catch(function(e){toast(e.message,'err');}); }
+function loadInvHist(){ api('getInventaires',{}).then(function(r){ const rows=r.rows||[];
+  document.getElementById('invHist').innerHTML= rows.length? '<div class="tbl-wrap"><table><thead><tr><th>Date</th><th>Réf. inv.</th><th>Lignes</th><th>Écarts</th><th></th></tr></thead><tbody>'
+    +rows.map(function(iv){ const ec=(iv.lignes||[]).filter(function(l){return l.ecart!==0;}).length; return '<tr><td>'+esc(isoD(iv.Date))+'</td><td>'+esc(iv.id)+'</td><td>'+(iv.lignes||[]).length+'</td><td>'+ec+'</td>'
+      +'<td style="white-space:nowrap"><button class="btn sm ghost" onclick="invPdf(\''+esc(iv.id)+'\')">PDF</button> <button class="btn sm ghost" onclick="invExcel(\''+esc(iv.id)+'\')">Excel</button></td></tr>'; }).join('')+'</tbody></table></div>'
+    : '<div class="empty">Aucun inventaire.</div>';
+  window.INV_HIST=rows;
+  }).catch(function(){}); }
+function invFind(id){ return (window.INV_HIST||[]).find(function(x){return x.id===id;}); }
+function invExcel(id){ const iv=invFind(id); if(!iv)return; exportExcel((iv.lignes||[]).map(function(l){return {Ref:l.ref,Designation:l.designation,Avant:l.avant,Reel:l.reel,Ecart:l.ecart};}),'Inventaire','Inventaire_'+isoD(iv.Date)+'.xlsx'); }
+function invPdf(id){ const iv=invFind(id); if(!iv)return; const J=window.jspdf; if(!J||!J.jsPDF){toast('PDF indisponible','err');return;}
+  const doc=new J.jsPDF({unit:'mm',format:'a4'}); doc.setFillColor(22,74,52);doc.rect(0,0,210,18,'F');doc.setTextColor(255);doc.setFont(undefined,'bold');doc.setFontSize(14);doc.text('VALORISE — Inventaire physique',14,12);
+  doc.setTextColor(25);doc.setFont(undefined,'normal');doc.setFontSize(10); doc.text('Date : '+isoD(iv.Date)+'     Réf : '+iv.id,14,26);
+  doc.autoTable({startY:31,head:[['Réf','Désignation','Avant','Réel','Écart']],body:(iv.lignes||[]).map(function(l){return [l.ref,l.designation||'',l.avant,l.reel,(l.ecart>0?'+':'')+l.ecart];}),styles:{fontSize:8},headStyles:{fillColor:[46,125,85]},
+    didParseCell:function(dd){ if(dd.section==='body'&&dd.column.index===4){ const v=String(dd.cell.raw); if(v.indexOf('-')===0)dd.cell.styles.textColor=[178,59,50]; else if(v.indexOf('+')===0)dd.cell.styles.textColor=[46,125,85]; } }});
+  doc.save('Inventaire_'+isoD(iv.Date)+'.pdf'); }
 
 /* ================= REGISTRE BL ================= */
 let REG_ALL=[];
