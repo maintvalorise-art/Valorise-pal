@@ -464,7 +464,7 @@ tr.alert td{background:var(--danger-soft)}
       <div class="info" id="qcProdInfo" style="margin:8px 0">Produit du shift : —</div>
       <h3 style="margin:10px 0 6px">Palettes NOK</h3>
       <div id="qcLines"></div>
-      <button class="btn ghost sm" onclick="qcAddLine()" style="margin-top:6px">+ Ajouter une ligne NOK</button>
+      <button class="btn ghost sm" onclick="qcAddLine()" style="margin-top:6px">+ Ligne NOK hors liste</button>
       <div class="info" id="qcTotals" style="margin-top:10px"></div>
       <div class="row-actions" style="margin-top:10px">
         <button class="btn" onclick="qcSave()">Enregistrer le contrôle</button>
@@ -1375,7 +1375,7 @@ tr.alert td{background:var(--danger-soft)}
   </section>
 </main>
 
-<div class="foot">Valorise — outil interne · <b>version 9.9-SUPABASE · 03-01 · qualite auto lignes+controleur</b> · <span id="userTag2"></span></div>
+<div class="foot">Valorise — outil interne · <b>version 10.0-SUPABASE · 03-01 · qualite tableau realise+NOK</b> · <span id="userTag2"></span></div>
 </div><!-- /appWrap -->
 <div class="toast" id="toast"></div>
 
@@ -3312,37 +3312,46 @@ function initQualite(){ const el=document.getElementById('qcDate'); if(el&&!el.v
 }
 function qcProd(){ const date=document.getElementById('qcDate').value, sh=document.getElementById('qcShift').value, eq=document.getElementById('qcEq').value;
   qcChefLookup(); qcAutoCtrl(); const info=document.getElementById('qcProdInfo');
-  if(!date){ info.textContent='Produit du shift : — (choisis la date)'; QC_LOTS=[]; qcFillLots(); return; }
+  if(!date){ info.textContent='Produit du shift : — (choisis la date)'; QC_LOTS=[]; qcBuildProducedLines([]); return; }
   api('getFiches',{du:date,au:date}).then(function(r){ const fs=(r.rows||[]).filter(function(f){ return isoD(f.Date)===date && String(f.Shift)===String(sh) && (!eq || f.Equipe===eq); });
     const prod=fs.reduce(function(s,f){return s+Number(f.TotalRealise||0);},0); QC_FICHES=fs; QC_LOTS=fs.map(function(f){return f.FicheID;});
     info.innerHTML='Produit du shift '+esc(sh)+(eq?(' · '+esc(eqLabel(eq))):'')+' : <b>'+prod+'</b> palette(s) · lots : '+(QC_LOTS.length?QC_LOTS.map(esc).join(', '):'—'); info.dataset.prod=prod;
     // Lignes AUTO : un article produit = une ligne (le contrôleur met la Qté NOK)
     const seen={}, produced=[]; fs.forEach(function(f){ (f.detail||[]).forEach(function(d){ const ref=d.Ref; const q=Number(d.QteRealise||0); if(!ref||q<=0)return; const k=f.FicheID+'|'+ref; if(seen[k])return; seen[k]=1; produced.push({lot:f.FicheID,ref:ref,prod:q}); }); });
-    qcBuildProducedLines(produced); qcFillLots(); qcTotals();
+    qcBuildProducedLines(produced); qcTotals();
   }).catch(function(){ info.textContent='Produit du shift : —'; }); }
-function qcBuildProducedLines(produced){ const cont=document.getElementById('qcLines');
-  if(!produced.length){ if(!cont.children.length) qcAddLine(); return; }
-  cont.innerHTML=''; produced.forEach(function(p){ qcAddLine(); const row=cont.lastElementChild;
-    row.querySelector('.qcRef').value=p.ref; const sel=row.querySelector('.qcLot');
-    sel.innerHTML='<option value="">— lot —</option>'+QC_LOTS.map(function(l){return '<option'+(l===p.lot?' selected':'')+'>'+esc(l)+'</option>';}).join('')+'<option value="__">(autre)</option>'; sel.value=p.lot;
-    row.dataset.prod=p.prod; }); }
 function qcAutoCtrl(){ const sh=document.getElementById('qcShift').value; const sel=document.getElementById('qcCtrl'); if(!sel)return;
   if(QC_CTRL && QC_CTRL[sh] && !sel.value){ sel.value=QC_CTRL[sh]; } }
-function qcFillLots(){ [].forEach.call(document.querySelectorAll('#qcLines .qcLot'),function(sel){ const cur=sel.value; sel.innerHTML='<option value="">— lot —</option>'+QC_LOTS.map(function(l){return '<option>'+esc(l)+'</option>';}).join('')+'<option value="__">(autre)</option>'; sel.value=cur; }); }
-function qcAddLine(){ const d=document.createElement('div'); d.className='qc-row grid g3'; d.style.cssText='gap:8px;margin-bottom:8px;border-bottom:1px dashed var(--line);padding-bottom:8px';
-  d.innerHTML='<div class="field"><label>N° lot</label><select class="qcLot"></select></div>'
-    +'<div class="field"><label>Référence</label><input class="qcRef" placeholder="réf palette"></div>'
-    +'<div class="field"><label>Qté NOK</label><input type="number" class="qcQte" min="0" value="0" oninput="qcTotals()"></div>'
-    +'<div class="field"><label>Motif</label><select class="qcMotif">'+QC_MOTIFS.map(function(m){return '<option>'+esc(m)+'</option>';}).join('')+'</select></div>'
-    +'<div class="field"><label>N° stampé (palette)</label><input class="qcStamp" placeholder="numéro libre"></div>'
-    +'<div class="field" style="align-self:end"><button class="btn link" onclick="this.closest(\'.qc-row\').remove();qcTotals()">✕ Retirer</button></div>';
-  document.getElementById('qcLines').appendChild(d); qcFillLots(); }
-function qcTotals(){ let nok=0; [].forEach.call(document.querySelectorAll('#qcLines .qcQte'),function(i){ nok+=Number(i.value||0); });
+function qcArtDes(ref){ const a=S.art.find(function(x){return String(x.Ref)===String(ref);}); return a?(a.Designation||''):''; }
+function qcMotifSel(v){ return '<select class="qcMotif">'+QC_MOTIFS.map(function(m){return '<option'+(m===v?' selected':'')+'>'+esc(m)+'</option>';}).join('')+'</select>'; }
+function qcRowHtml(o){ return '<tr class="qcL" data-lot="'+esc(o.lot||'')+'" data-ref="'+esc(o.ref||'')+'" data-prod="'+(o.prod||0)+'">'
+  +'<td>'+esc(o.lot||'—')+'</td><td><b>'+esc(o.ref||'')+'</b></td><td>'+esc(qcArtDes(o.ref))+'</td>'
+  +'<td style="text-align:right">'+(o.prod||0)+'</td>'
+  +'<td><input type="number" class="qcQte" min="0" max="'+(o.prod||'')+'" value="0" oninput="qcTotals()" style="width:70px"></td>'
+  +'<td class="qcOk" style="text-align:right;color:#2e7d55;font-weight:600">'+(o.prod||0)+'</td>'
+  +'<td>'+qcMotifSel('')+'</td><td><input class="qcStamp" placeholder="n° stampé" style="width:110px"></td>'
+  +'<td><button class="btn link" onclick="this.closest(\'tr\').remove();qcTotals()">✕</button></td></tr>'; }
+function qcTableWrap(bodyRows){ return '<div class="tbl-wrap"><table><thead><tr><th>Lot</th><th>Réf</th><th>Désignation</th><th>Réalisé</th><th>Qté NOK</th><th>OK</th><th>Motif</th><th>N° stampé</th><th></th></tr></thead><tbody id="qcTbody">'+bodyRows+'</tbody></table></div>'; }
+function qcBuildProducedLines(produced){ const cont=document.getElementById('qcLines');
+  if(!produced.length){ cont.innerHTML=qcTableWrap('')+'<div class="empty" style="margin-top:6px">Aucune fiche de production pour ce shift. Ajoute une ligne manuelle si besoin.</div>'; return; }
+  cont.innerHTML=qcTableWrap(produced.map(qcRowHtml).join('')); }
+function qcAddLine(){ let tb=document.getElementById('qcTbody'); if(!tb){ document.getElementById('qcLines').innerHTML=qcTableWrap(''); tb=document.getElementById('qcTbody'); }
+  const tr=document.createElement('tr'); tr.className='qcL'; tr.dataset.lot=''; tr.dataset.ref=''; tr.dataset.prod=0;
+  tr.innerHTML='<td><input class="qcLotIn" placeholder="lot" style="width:120px"></td><td><input class="qcRefIn" list="pfList" placeholder="réf" style="width:120px"></td><td class="qcDesC"></td>'
+    +'<td style="text-align:right">—</td><td><input type="number" class="qcQte" min="0" value="0" oninput="qcTotals()" style="width:70px"></td><td class="qcOk">—</td>'
+    +'<td>'+qcMotifSel('')+'</td><td><input class="qcStamp" placeholder="n° stampé" style="width:110px"></td>'
+    +'<td><button class="btn link" onclick="this.closest(\'tr\').remove();qcTotals()">✕</button></td>';
+  tb.appendChild(tr);
+  const refIn=tr.querySelector('.qcRefIn'); refIn.addEventListener('change',function(){ tr.dataset.ref=refIn.value.trim(); tr.querySelector('.qcDesC').textContent=qcArtDes(refIn.value.trim()); });
+  const lotIn=tr.querySelector('.qcLotIn'); lotIn.addEventListener('change',function(){ tr.dataset.lot=lotIn.value.trim(); }); }
+function qcRowRef(tr){ return tr.dataset.ref || (tr.querySelector('.qcRefIn')?tr.querySelector('.qcRefIn').value.trim():''); }
+function qcRowLot(tr){ return tr.dataset.lot || (tr.querySelector('.qcLotIn')?tr.querySelector('.qcLotIn').value.trim():''); }
+function qcTotals(){ let nok=0; [].forEach.call(document.querySelectorAll('#qcLines tr.qcL'),function(tr){ const q=Number(tr.querySelector('.qcQte').value||0); nok+=q; const prod=Number(tr.dataset.prod||0); const okc=tr.querySelector('.qcOk'); if(okc){ okc.textContent=(prod?Math.max(0,prod-q):'—'); } });
   const prod=Number(document.getElementById('qcProdInfo').dataset.prod||0); const nc= prod>0?(nok/prod*100):0; const qual= prod>0?((prod-nok)/prod*100):0;
   document.getElementById('qcTotals').innerHTML='Total NOK : <b>'+nok+'</b> · Non-conformité : <b style="color:'+(nc>5?'#b23b32':'#C98A3A')+'">'+nc.toFixed(1)+'%</b> · Qualité : <b style="color:#2e7d55">'+qual.toFixed(1)+'%</b>'; }
 function qcGather(){ const lignes=[];
-  [].forEach.call(document.querySelectorAll('#qcLines .qc-row'),function(r){ const lot=r.querySelector('.qcLot').value, ref=r.querySelector('.qcRef').value.trim(), qte=Number(r.querySelector('.qcQte').value||0), motif=r.querySelector('.qcMotif').value, stamp=r.querySelector('.qcStamp').value.trim();
-    if(qte>0) lignes.push({lot:(lot==='__'?'':lot),ref:ref,qte:qte,motif:motif,stamp:stamp}); });
+  [].forEach.call(document.querySelectorAll('#qcLines tr.qcL'),function(tr){ const ref=qcRowRef(tr), lot=qcRowLot(tr), qte=Number(tr.querySelector('.qcQte').value||0), motif=tr.querySelector('.qcMotif').value, stamp=tr.querySelector('.qcStamp').value.trim();
+    if(qte>0) lignes.push({lot:lot,ref:ref,qte:qte,motif:motif,stamp:stamp}); });
   const prod=Number(document.getElementById('qcProdInfo').dataset.prod||0); const nok=lignes.reduce(function(s,l){return s+l.qte;},0);
   return { Date:document.getElementById('qcDate').value, Equipe:document.getElementById('qcEq').value, Shift:document.getElementById('qcShift').value, Chef:(document.getElementById('qcChefInfo').dataset.chef||''), Controleur:document.getElementById('qcCtrl').value, Type:document.getElementById('qcType').value, Produit:prod, NOK:nok, lignes:lignes }; }
 function qcSave(){ const rec=qcGather(); if(!rec.Date){toast('Date requise','err');return;} if(!rec.Controleur){toast('Choisis le contrôleur','err');return;} if(!rec.lignes.length){toast('Ajoute au moins une ligne NOK (qté>0)','err');return;}
