@@ -1221,7 +1221,7 @@ tr.alert td{background:var(--danger-soft)}
   </section>
 </main>
 
-<div class="foot">Valorise — outil interne · <b>version 8.6-SUPABASE · 03-01 · inventaire physique</b> · <span id="userTag2"></span></div>
+<div class="foot">Valorise — outil interne · <b>version 8.7-SUPABASE · 03-01 · etat BL pro</b> · <span id="userTag2"></span></div>
 </div><!-- /appWrap -->
 <div class="toast" id="toast"></div>
 
@@ -3712,12 +3712,44 @@ function ebExcel(){ if(!EB_LAST.cli.length){toast('Rien à exporter','err');retu
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet([{'Total général':EB_LAST.tot}]), 'Total');
   XLSX.writeFile(wb,'Etat_livraisons.xlsx'); }
 function ebPdf(){ if(!EB_LAST.cli.length){toast('Rien à exporter','err');return;} const J=window.jspdf; if(!J||!J.jsPDF){toast('PDF indisponible','err');return;}
-  const doc=new J.jsPDF({unit:'mm',format:'a4'}); doc.setFillColor(22,74,52);doc.rect(0,0,210,18,'F');doc.setTextColor(255);doc.setFont(undefined,'bold');doc.setFontSize(14);doc.text('VALORISE — État des livraisons',14,12);
-  doc.setTextColor(25);doc.setFont(undefined,'normal');doc.setFontSize(10);
-  doc.text('Période : '+document.getElementById('ebDu').value+' → '+document.getElementById('ebAu').value+'    Total livré : '+EB_LAST.tot,14,26);
-  doc.autoTable({startY:31,head:[['Type de palette','Total livré','%']],body:EB_LAST.typ.map(function(x){return [x.Type,x.Qte,(EB_LAST.tot?Math.round(x.Qte/EB_LAST.tot*100):0)+'%'];}),styles:{fontSize:9},headStyles:{fillColor:[46,125,85]}});
-  doc.autoTable({startY:doc.lastAutoTable.finalY+6,head:[['Client','Nb bons','Total livré','%']],body:EB_LAST.cli.map(function(x){return [x.Client,x.Bons,x.Qte,(EB_LAST.tot?Math.round(x.Qte/EB_LAST.tot*100):0)+'%'];}),styles:{fontSize:8},headStyles:{fillColor:[46,125,85]}});
-  doc.save('Etat_livraisons.pdf'); }
+  const nf=function(n){ return new Intl.NumberFormat('fr-FR').format(Math.round(n||0)); };
+  const du=document.getElementById('ebDu').value, au=document.getElementById('ebAu').value, tot=EB_LAST.tot||0;
+  const nbBons=EB_LAST.cli.reduce(function(s,x){return s+(x.Bons||0);},0);
+  const pct=function(v){ return tot?Math.round(v/tot*100):0; };
+  const typ={}; EB_LAST.typ.forEach(function(x){ typ[x.Type]=x.Qte; });
+  const doc=new J.jsPDF({unit:'mm',format:'a4'}); const W=210;
+  // bandeau
+  doc.setFillColor(13,44,31); doc.rect(0,0,W,26,'F'); doc.setFillColor(201,138,58); doc.rect(0,26,W,1.2,'F');
+  doc.setTextColor(255); doc.setFont('helvetica','bold'); doc.setFontSize(16); doc.text('VALORISE MAROC', 14, 12);
+  doc.setFont('helvetica','normal'); doc.setFontSize(11); doc.setTextColor(240,194,116); doc.text('État des livraisons', 14, 20);
+  doc.setTextColor(255); doc.setFontSize(9); doc.text('Période : '+du+'  au  '+au, W-14, 20, {align:'right'});
+  // cartes KPI
+  const cards=[['Total livré', nf(tot)], ['Clients', String(EB_LAST.cli.length)], ['Bons', nf(nbBons)], ['NEUF', pct(typ['NEUF']||0)+'%'], ['RECYCLER', pct(typ['RECYCLER']||0)+'%']];
+  const n=cards.length, gap=4, x0=14, cw=(W-28-gap*(n-1))/n, cy=34, ch=20;
+  cards.forEach(function(c,k){ const x=x0+k*(cw+gap); doc.setFillColor(243,246,244); doc.roundedRect(x,cy,cw,ch,2,2,'F');
+    doc.setTextColor(110,125,114); doc.setFont('helvetica','normal'); doc.setFontSize(7.5); doc.text(c[0], x+cw/2, cy+6, {align:'center'});
+    doc.setTextColor(22,74,52); doc.setFont('helvetica','bold'); doc.setFontSize(13); doc.text(String(c[1]), x+cw/2, cy+15, {align:'center'}); });
+  // tableau par type
+  let y=cy+ch+8; doc.setTextColor(22,74,52); doc.setFont('helvetica','bold'); doc.setFontSize(11); doc.text('Répartition par type de palette', 14, y);
+  doc.autoTable({ startY:y+2, head:[['Type','Total livré','Part']], body:EB_LAST.typ.map(function(x){return [x.Type, nf(x.Qte), pct(x.Qte)+'%'];}),
+    theme:'grid', styles:{fontSize:9, cellPadding:2.2}, headStyles:{fillColor:[22,74,52], textColor:255, halign:'left'},
+    columnStyles:{1:{halign:'right'},2:{halign:'right', cellWidth:40}}, alternateRowStyles:{fillColor:[247,249,247]},
+    didParseCell:function(d){ if(d.section==='body'&&d.column.index===0){ d.cell.styles.fontStyle='bold'; } },
+    didDrawCell:function(d){ if(d.section==='body'&&d.column.index===2){ const row=EB_LAST.typ[d.row.index]; const p=tot?row.Qte/tot:0; const bw=(d.cell.width-6)*p; doc.setFillColor(201,138,58); doc.rect(d.cell.x+3, d.cell.y+d.cell.height-2.2, bw, 1.1, 'F'); } } });
+  // tableau par client
+  y=doc.lastAutoTable.finalY+8; doc.setTextColor(22,74,52); doc.setFont('helvetica','bold'); doc.setFontSize(11); doc.text('Détail par client', 14, y);
+  doc.autoTable({ startY:y+2, head:[['#','Client','Nb bons','Total livré','Part']],
+    body:EB_LAST.cli.map(function(x,k){return [String(k+1), x.Client, nf(x.Bons), nf(x.Qte), pct(x.Qte)+'%'];}),
+    foot:[['', 'TOTAL', nf(nbBons), nf(tot), '100%']],
+    theme:'striped', styles:{fontSize:8.5, cellPadding:1.8}, headStyles:{fillColor:[46,125,85], textColor:255},
+    footStyles:{fillColor:[22,74,52], textColor:255, fontStyle:'bold'},
+    columnStyles:{0:{cellWidth:9, halign:'center', textColor:[150,150,150]},2:{halign:'right'},3:{halign:'right'},4:{halign:'right', cellWidth:34}},
+    alternateRowStyles:{fillColor:[247,249,247]},
+    didDrawCell:function(d){ if(d.section==='body'&&d.column.index===4){ const row=EB_LAST.cli[d.row.index]; const p=tot?row.Qte/tot:0; const bw=(d.cell.width-6)*p; doc.setFillColor(46,125,85); doc.rect(d.cell.x+3, d.cell.y+d.cell.height-2, bw, 1, 'F'); } },
+    didDrawPage:function(d){ const h=doc.internal.pageSize.getHeight(); doc.setFontSize(7); doc.setTextColor(150);
+      doc.text('Valorise Maroc · Zone Franche Tanger · Édité le '+new Date().toISOString().slice(0,10), 14, h-8);
+      doc.text('Page '+doc.internal.getNumberOfPages(), W-14, h-8, {align:'right'}); } });
+  doc.save('Etat_livraisons_'+(du||'').replace(/-/g,'')+'.pdf'); }
 
 /* ================= INVENTAIRE PHYSIQUE ================= */
 let INV_ROWS=[];
