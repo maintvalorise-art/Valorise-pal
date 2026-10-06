@@ -345,10 +345,12 @@ tr.alert td{background:var(--danger-soft)}
     <div class="vhead"><div class="eyebrow">Chef d'équipe</div><h2>Fiche de production</h2>
       <p>Production par poste, bois/clous consommés, arrêts — puis PDF ou WhatsApp.</p></div>
     <div class="card">
-      <div class="grid g3">
+      <div class="grid g2">
         <div class="field"><label>Date</label><input type="date" id="fDate"></div>
         <div class="field"><label>Chef d'équipe</label><select id="fChef"></select></div>
-        <div class="field"><label>Type de palette</label>
+        <div class="field"><label>Zone de l'équipe</label>
+          <select id="fZone"><option value="NEUF">Équipe NEUF</option><option value="RECYCLER">Équipe RECYCLER</option></select></div>
+        <div class="field"><label>Type de palette produite</label>
           <select id="fType"><option value="NEUF">NEUF</option><option value="RECYCLER">RECYCLER</option></select></div>
       </div>
       <div id="fMeta" class="info hidden"></div>
@@ -1373,7 +1375,7 @@ tr.alert td{background:var(--danger-soft)}
   </section>
 </main>
 
-<div class="foot">Valorise — outil interne · <b>version 9.7-SUPABASE · 03-01 · covers selection</b> · <span id="userTag2"></span></div>
+<div class="foot">Valorise — outil interne · <b>version 9.8-SUPABASE · 03-01 · fiche zone+type</b> · <span id="userTag2"></span></div>
 </div><!-- /appWrap -->
 <div class="toast" id="toast"></div>
 
@@ -1765,7 +1767,7 @@ async function fb_saveFiche(p){
   (p.consommation||[]).forEach(function(l){ if(!l.ref||!Number(l.qte)) return; const a=map[l.ref]||{};
     batch.set(db.collection('mouvements').doc(),{Date:date,Sens:'OUT',Famille:a.Famille||'',Ref:l.ref,Designation:a.Designation||'',
       Qte:Number(l.qte),Unite:a.Unite||'',Lot:'',NumeroBon:fid,Nom:p.chef||'',Prix:'',Commentaire:'Consommation',Source:'FICHE',TypePalette:a.TypePalette||''}); });
-  batch.set(db.collection('fiches').doc(fid),{FicheID:fid,Date:date,Type:p.type,Equipe:p.equipe,Shift:p.shift,Chef:p.chef,
+  batch.set(db.collection('fiches').doc(fid),{FicheID:fid,Date:date,Type:p.type,Zone:p.zone||'',Equipe:p.equipe,Shift:p.shift,Chef:p.chef,
     ManqueMP:Number(p.manqueMP||0),Reglage:Number(p.reglage||0),Maintenance:Number(p.maint||0),Autres:Number(p.autres||0),
     DescrMaint:p.descrMaint||'',Commentaire:p.commentaire||'',TotalRealise:total});
   // agrégation daily prod (COUVERCLE = GABARIT, PALLET = MONTAGE PALLET)
@@ -2081,9 +2083,9 @@ function fillConsoList(){ document.getElementById('consoList').innerHTML=dlOptio
 function fillSoList(){ const el=document.getElementById('soList'); if(!el) return; const list=(ROLE==='tl')?S.art.filter(function(a){return !isPF(a);}):S.art; el.innerHTML=dlOptions(list); }
 function fillOpSelects(){
   const m=metaOfChef(document.getElementById('fChef').value);
-  const type=document.getElementById('fType').value;
+  const zone=(document.getElementById('fZone')||{value:'NEUF'}).value;
   let team=m?empOfEquipe(m.equipe):S.emp;
-  const filt=team.filter(function(e){ const d=String(e.Departement||''); return type==='NEUF'?/neuf/i.test(d):/recycl/i.test(d); });
+  const filt=team.filter(function(e){ const d=String(e.Departement||''); return zone==='NEUF'?/neuf/i.test(d):/recycl/i.test(d); });
   if(filt.length) team=filt;
   const opts='<option value="">—</option>'+team.map(function(e){ return '<option value="'+esc(e.Nom)+'">'+esc(e.Nom)+' ('+esc(e.ID)+')</option>'; }).join('');
   document.querySelectorAll('#fPostes .poOp1, #fPostes .poOp2').forEach(function(sel){ const v=sel.value; sel.innerHTML=opts; sel.value=v; });
@@ -2114,7 +2116,8 @@ document.getElementById('fChef').addEventListener('change',function(){
   else box.classList.add('hidden');
   fillOpSelects();
 });
-document.getElementById('fType').addEventListener('change',function(){ fillPfList(); fillOpSelects(); });
+document.getElementById('fType').addEventListener('change',function(){ fillPfList(); });
+document.getElementById('fZone').addEventListener('change',function(){ fillOpSelects(); });
 
 let LAST_FICHE=null, CURFICHE=null, FICHE_SAVED_ID=null;
 function newFicheId(){ CURFICHE=uid('FP-'); FICHE_SAVED_ID=null; const el=document.getElementById('fNum'); if(el) el.textContent=CURFICHE; }
@@ -2131,7 +2134,7 @@ function buildFicheForm(){
     return {ref:r.querySelector('.cRef').value.trim(), qte:r.querySelector('.cQte').value}; })
     .filter(function(l){return l.ref&&Number(l.qte)>0;});
   const total=postes.reduce(function(s,p){return s+(p.prod&&p.ref?Number(p.qte||0):0);},0);
-  return { ficheId:CURFICHE||'—', date:document.getElementById('fDate').value, type:document.getElementById('fType').value,
+  return { ficheId:CURFICHE||'—', date:document.getElementById('fDate').value, type:document.getElementById('fType').value, zone:(document.getElementById('fZone')||{value:''}).value,
     equipe:m?m.equipe:'', shift:m?m.shift:'', chef:m?m.chef:'', postes:postes, consommation:consommation,
     manqueMP:+document.getElementById('fMMP').value||0, reglage:+document.getElementById('fReg').value||0,
     maint:+document.getElementById('fMnt').value||0, autres:+document.getElementById('fAut').value||0,
@@ -4479,6 +4482,7 @@ function hEdit(i){ const f=H_ROWS[i]; if(!f)return;
   setTimeout(function(){
     var el;
     if(el=document.getElementById('fType')) el.value=f.Type||'NEUF';
+    if(el=document.getElementById('fZone')) el.value=f.Zone||f.Type||'NEUF';
     if(el=document.getElementById('fDate')) el.value=isoD(f.Date);
     const key=f.Chef+'|||'+f.Equipe+'|||'+f.Shift; const sel=document.getElementById('fChef');
     if(sel){ if(![].some.call(sel.options,function(o){return o.value===key;})){ const o=document.createElement('option'); o.value=key; o.textContent=f.Chef+' ('+eqLabel(f.Equipe)+' · Shift '+shiftLabel(f.Shift)+')'; sel.appendChild(o); }
