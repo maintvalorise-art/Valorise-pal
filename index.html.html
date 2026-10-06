@@ -1373,7 +1373,7 @@ tr.alert td{background:var(--danger-soft)}
   </section>
 </main>
 
-<div class="foot">Valorise — outil interne · <b>version 9.6-SUPABASE · 03-01 · doublons+covers+ref fiche</b> · <span id="userTag2"></span></div>
+<div class="foot">Valorise — outil interne · <b>version 9.7-SUPABASE · 03-01 · covers selection</b> · <span id="userTag2"></span></div>
 </div><!-- /appWrap -->
 <div class="toast" id="toast"></div>
 
@@ -2427,18 +2427,24 @@ function artDoublons(){ const box=document.getElementById('artTools');
   box.innerHTML=h; }
 function artMes(a){ return a.Mesure || coMesFrom(a) || ''; }
 function artGenCovers(){ const box=document.getElementById('artTools');
-  const pf=S.art.filter(function(a){ return isPF(a) && !/couvercle|cover/i.test((a.Designation||'')+' '+(a.Ref||'')); });
-  const existCov={}; S.art.forEach(function(a){ if(/couvercle|cover/i.test((a.Designation||'')+' '+(a.Ref||''))){ existCov[norm(artMes(a))]=1; } });
-  const toCreate=[]; pf.forEach(function(a){ const mes=artMes(a); const covRef=String(a.Ref)+'-COV';
-    if(S.art.some(function(x){return String(x.Ref)===covRef;})) return; // déjà
-    toCreate.push({Ref:covRef, Designation:'Couvercle '+(mes||a.Designation||''), Famille:a.Famille||'Produit fini', Unite:a.Unite||'U', TypePalette:a.TypePalette||'', Mesure:mes, StockMin:0, StockInitial:0}); });
-  if(!toCreate.length){ box.innerHTML='<div class="info">Rien à générer : chaque palette a déjà son couvercle (-COV) ✔</div>'; return; }
-  box.innerHTML='<div class="card" style="border:1px solid var(--green)"><h3>'+toCreate.length+' couvercle(s) à créer</h3>'
-    +'<div class="tbl-wrap"><table><thead><tr><th>Réf couvercle</th><th>Désignation</th><th>Mesure</th></tr></thead><tbody>'
-    +toCreate.slice(0,200).map(function(c){return '<tr><td><b>'+esc(c.Ref)+'</b></td><td>'+esc(c.Designation)+'</td><td>'+esc(c.Mesure)+'</td></tr>';}).join('')+'</tbody></table></div>'
-    +'<button class="btn" style="width:100%;margin-top:8px" onclick="artGenCoversDo()">Créer ces '+toCreate.length+' couvercles</button></div>';
-  window.__COVERS=toCreate; }
-function artGenCoversDo(){ const rows=window.__COVERS||[]; if(!rows.length)return; toast('Création…');
+  const pf=S.art.filter(function(a){ return isPF(a) && !/couvercle|cover/i.test((a.Designation||'')+' '+(a.Ref||'')); })
+    .sort(function(a,b){return String(a.Ref).localeCompare(String(b.Ref));});
+  if(!pf.length){ box.innerHTML='<div class="info">Aucune palette (produit fini) trouvée.</div>'; return; }
+  let h='<div class="card" style="border:1px solid var(--green)"><h3>Choisis les palettes → créer leur couvercle</h3>'
+    +'<div class="row-actions" style="margin-bottom:6px"><input id="covSearch" placeholder="filtrer…" oninput="covFilter()" style="flex:1"><button class="btn ghost sm" onclick="covToggleAll(true)">Tout cocher</button><button class="btn ghost sm" onclick="covToggleAll(false)">Tout décocher</button></div>'
+    +'<div class="tbl-wrap" style="max-height:360px;overflow:auto"><table><thead><tr><th></th><th>Réf palette</th><th>Désignation</th><th>Mesure</th><th>Couvercle → créé</th></tr></thead><tbody>'
+    +pf.map(function(a){ const mes=artMes(a); const covRef=String(a.Ref)+'-COV'; const exists=S.art.some(function(x){return String(x.Ref)===covRef;});
+      return '<tr class="covRow" data-ref="'+esc(a.Ref)+'" data-mes="'+esc(mes)+'" data-fam="'+esc(a.Famille||'')+'" data-unite="'+esc(a.Unite||'')+'" data-type="'+esc(a.TypePalette||'')+'">'
+        +'<td>'+(exists?'<span class="muted" title="déjà créé">✔</span>':'<input type="checkbox" class="covChk">')+'</td>'
+        +'<td><b>'+esc(a.Ref)+'</b></td><td>'+esc(a.Designation||'')+'</td><td>'+esc(mes)+'</td><td>'+esc(covRef)+(exists?' <span class="muted">(existe)</span>':'')+'</td></tr>'; }).join('')
+    +'</tbody></table></div>'
+    +'<button class="btn" style="width:100%;margin-top:8px" onclick="artGenCoversDo()">Créer les couvercles cochés</button></div>';
+  box.innerHTML=h; }
+function covFilter(){ const q=(document.getElementById('covSearch').value||'').toLowerCase(); [].forEach.call(document.querySelectorAll('.covRow'),function(tr){ tr.style.display=(!q||tr.textContent.toLowerCase().indexOf(q)>=0)?'':'none'; }); }
+function covToggleAll(v){ [].forEach.call(document.querySelectorAll('.covRow .covChk'),function(c){ if(c.closest('tr').style.display!=='none') c.checked=v; }); }
+function artGenCoversDo(){ const rows=[]; [].forEach.call(document.querySelectorAll('.covRow'),function(tr){ const chk=tr.querySelector('.covChk'); if(chk&&chk.checked){ const mes=tr.dataset.mes;
+    rows.push({Ref:tr.dataset.ref+'-COV', Designation:'Couvercle '+(mes||tr.dataset.ref), Famille:tr.dataset.fam||'Produit fini', Unite:tr.dataset.unite||'U', TypePalette:tr.dataset.type||'', Mesure:mes, StockMin:0, StockInitial:0}); } });
+  if(!rows.length){ toast('Coche au moins une palette','err'); return; } toast('Création…');
   api('saveArticlesBulk',{password:ADMIN_PWD,rows:rows}).then(function(r){ rows.forEach(function(a){ if(!S.art.some(function(x){return String(x.Ref)===a.Ref;})) S.art.push(a); });
     document.getElementById('artTools').innerHTML='<div class="info">'+(r.n||rows.length)+' couvercle(s) créé(s) ✔</div>'; renderArticles(); toast('Couvercles créés ✔','ok'); }).catch(function(e){toast(e.message,'err');}); }
 function saveArticle(){
