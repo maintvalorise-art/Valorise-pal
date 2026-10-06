@@ -907,6 +907,34 @@ tr.alert td{background:var(--danger-soft)}
     </div>
   </section>
 
+  <!-- ============ ÉCHÉANCES (étalonnage four + ONSSA) ============ -->
+  <section class="view" data-view="echeances">
+    <div class="vhead"><div class="eyebrow">Traitement</div><h2>Échéances — étalonnage &amp; ONSSA</h2>
+      <p>Suivi des dates : prochain étalonnage du four et validité de l'autorisation ONSSA, avec alerte.</p></div>
+    <div class="admin-body" data-admin="echeances">
+      <div class="card">
+        <h3>Étalonnage du four</h3>
+        <div class="grid g3">
+          <div class="field"><label>Date du dernier étalonnage</label><input type="date" id="etFourLast" oninput="echPreview()"></div>
+          <div class="field"><label>Périodicité (mois)</label><input type="number" id="etFourPer" min="1" step="1" value="12" oninput="echPreview()"></div>
+          <div class="field"><label>Organisme / N°</label><input id="etFourOrg" placeholder="labo, n° certificat"></div>
+        </div>
+        <div id="etFourState" style="margin-top:8px"></div>
+      </div>
+      <div class="card">
+        <h3>Autorisation ONSSA</h3>
+        <div class="grid g3">
+          <div class="field"><label>N° autorisation</label><input id="etOnNum" placeholder="MA-3483 / …"></div>
+          <div class="field"><label>Date début</label><input type="date" id="etOnDeb" oninput="echPreview()"></div>
+          <div class="field"><label>Date fin (expiration)</label><input type="date" id="etOnFin" oninput="echPreview()"></div>
+        </div>
+        <div id="etOnState" style="margin-top:8px"></div>
+        <div class="row-actions" style="margin-top:8px"><button class="btn ghost sm" onclick="echAttestation()">Attestation PDF</button></div>
+      </div>
+      <button class="btn" style="width:100%" onclick="saveEcheances()">Enregistrer</button>
+    </div>
+  </section>
+
   <!-- ============ ZONE 2 (déchets) ============ -->
   <section class="view" data-view="z2imp">
     <div class="vhead"><div class="eyebrow">Zone 2</div><h2>Import tickets (pont bascule)</h2>
@@ -1231,11 +1259,12 @@ tr.alert td{background:var(--danger-soft)}
       <p>Cibles utilisées automatiquement par le Tableau de bord (production par shift, absence).</p></div>
     <div class="admin-body" data-admin="objectifs">
       <div class="card">
-        <h3>Production — objectif par shift</h3>
-        <div class="grid g3">
-          <div class="field"><label>NEUF (palettes / shift)</label><input type="number" id="objNeuf" min="0" step="10" placeholder="ex. 600"></div>
-          <div class="field"><label>RECYCLER (palettes / shift)</label><input type="number" id="objRec" min="0" step="10" placeholder="ex. 200"></div>
-          <div class="field"><label>Shifts par jour</label><input type="number" id="objShifts" min="1" max="4" step="1" value="3"></div>
+        <h3>Production — objectifs par shift</h3>
+        <div class="grid g2">
+          <div class="field"><label>NEUF — palettes / shift</label><input type="number" id="objNeuf" min="0" step="10" placeholder="ex. 600"></div>
+          <div class="field"><label>NEUF — nombre de shifts / jour</label><input type="number" id="objNeufShifts" min="0" max="4" step="1" value="3"></div>
+          <div class="field"><label>RECYCLER — palettes / shift</label><input type="number" id="objRec" min="0" step="10" placeholder="ex. 200"></div>
+          <div class="field"><label>RECYCLER — nombre de shifts / jour</label><input type="number" id="objRecShifts" min="0" max="4" step="1" value="3"></div>
         </div>
         <p class="muted" id="objPreview" style="font-size:12px;margin-top:4px"></p>
       </div>
@@ -1296,7 +1325,7 @@ tr.alert td{background:var(--danger-soft)}
   </section>
 </main>
 
-<div class="foot">Valorise — outil interne · <b>version 8.9-SUPABASE · 03-01 · objectifs auto</b> · <span id="userTag2"></span></div>
+<div class="foot">Valorise — outil interne · <b>version 9.0-SUPABASE · 03-01 · objectifs+echeances</b> · <span id="userTag2"></span></div>
 </div><!-- /appWrap -->
 <div class="toast" id="toast"></div>
 
@@ -1385,7 +1414,7 @@ async function sbForgot(){ const em=document.getElementById('lgEmail').value.tri
   if(!em){ msg.textContent='Saisis ton email d\'abord'; return; }
   const {error}=await SB.auth.resetPasswordForEmail(em); msg.textContent=error?('Erreur : '+error.message):'Email de réinitialisation envoyé ✔ (vérifie ta boîte)'; }
 async function sbLogout(){ await SB.auth.signOut(); location.reload(); }
-const WRITE=['saveEmploye','deleteEmploye','saveAffectation','savePlanning','saveAbsence','saveArticle','deleteArticle','saveEntree','saveSortie','saveCommande','saveOrdreProd','saveFiche','deleteFiche','savePoste','deletePoste','saveBom','deleteBom','saveQuotation','setAdminPassword','saveLivraison','savePlanLiv','setBlNext','importLivraisons','updateLivraison','deleteLivraison','clearLivraisons','deleteLivBulk','deleteFicheAbsence','saveTraitement','deleteTraitement','saveCommandesSemaine','saveZ2Mouv','deleteZ2Mouv','saveZ2Article','deleteZ2Article','importZ2','clearZ2','saveNoteTL','saveDemande','deleteDemande','saveContrat','saveInventaire','saveObjectifs'];
+const WRITE=['saveEmploye','deleteEmploye','saveAffectation','savePlanning','saveAbsence','saveArticle','deleteArticle','saveEntree','saveSortie','saveCommande','saveOrdreProd','saveFiche','deleteFiche','savePoste','deletePoste','saveBom','deleteBom','saveQuotation','setAdminPassword','saveLivraison','savePlanLiv','setBlNext','importLivraisons','updateLivraison','deleteLivraison','clearLivraisons','deleteLivBulk','deleteFicheAbsence','saveTraitement','deleteTraitement','saveCommandesSemaine','saveZ2Mouv','deleteZ2Mouv','saveZ2Article','deleteZ2Article','importZ2','clearZ2','saveNoteTL','saveDemande','deleteDemande','saveContrat','saveInventaire','saveObjectifs','saveEcheances'];
 
 async function fb_importLivraisons(p){ const docs=p.docs||[];
   for(var i=0;i<docs.length;i+=400){ const batch=db.batch();
@@ -1458,6 +1487,8 @@ async function route(action,p){
     case 'getContrat':     { const d=await db.collection('contrats').doc('standing').get(); return {ok:true, data:(d.exists?d.data():null)}; }
     case 'getObjectifs':   { const d=await db.collection('config').doc('objectifs').get(); return {ok:true, data:(d.exists?d.data():null)}; }
     case 'saveObjectifs':  await db.collection('config').doc('objectifs').set(p.data||{}); return {ok:true};
+    case 'getEcheances':   { const d=await db.collection('config').doc('echeances').get(); return {ok:true, data:(d.exists?d.data():null)}; }
+    case 'saveEcheances':  await db.collection('config').doc('echeances').set(p.data||{}); return {ok:true};
     case 'saveContrat':    await db.collection('contrats').doc('standing').set({data:p.data||{}}); return {ok:true};
     case 'saveCommandesSemaine': await db.collection('commandesSemaine').doc(String(p.week)).set({week:String(p.week),annee:p.annee,semaine:p.semaine,data:p.data||{},reste:p.reste||{},clients:p.clients||[]}); return {ok:true};
     case 'saveArticle':    return await fb_saveArticle(p);
@@ -1722,7 +1753,7 @@ const MODULES = {
   prod:  {label:'Gestion Prod',     tabs:[['contrat','Contrats'],['suivicmd','Suivi Cmd'],['configpal','Configurateur'],['ordre','Ordre de Prod'],['bom','BOM'],['devis','Devis'],['recapprod','Recap Prod'],['etatprod','État Prod'],['histo','Historique'],['kpi','KPI']]},
   rh:    {label:'Gestion RH',       tabs:[['employes','Employés'],['affect','Affectation'],['postes','Postes'],['matrice','Matrice'],['recap','Recap abs.'],['abshisto','Fiches absence'],['demrh','Demandes'],['notation','Notation'],['transport','Transport']]},
   stock: {label:'Gestion de Stock', tabs:[['stock','Stock'],['entree','Entrée stock'],['sortie','Sortie stock'],['inventaire','Inventaire'],['livnew','Bon Livraison'],['livreg','Registre BL'],['etatbl','État BL'],['planliv','Planning Livraison'],['articles','Articles']]},
-  trt:   {label:'Traitement',        tabs:[['trait','Fiche traitement'],['etattrait','État Traitement']]},
+  trt:   {label:'Traitement',        tabs:[['trait','Fiche traitement'],['etattrait','État Traitement'],['echeances','Échéances']]},
   config:{label:'Config',           tabs:[['objectifs','Objectifs'],['import','Import Excel'],['reglages','Réglages']]}
 };
 let ROLE=null, CURMOD=null;
@@ -1874,6 +1905,7 @@ function onEnter(v){
   if(v==='etatprod') initEtatProd();
   if(v==='dashboard') initDashboard();
   if(v==='objectifs') initObjectifs();
+  if(v==='echeances') initEcheances();
   if(v==='etatbl') initEtatBl();
   if(v==='inventaire') initInventaire();
   if(v==='etattrait') initEtatTrait();
@@ -4049,19 +4081,61 @@ function weekRangeDefaults(idDu,idAu){
 let H_ROWS=[];
 function initHisto(){ const d=new Date(); document.getElementById('hDu').value=(d.getFullYear()-1)+'-01-01'; document.getElementById('hAu').value=d.toISOString().slice(0,10); loadHistorique(); }
 
+/* ================= ÉCHÉANCES (étalonnage four + ONSSA) ================= */
+let ECH={};
+function echAddMonths(dstr,m){ const d=new Date(dstr+'T00:00:00'); if(isNaN(d))return''; d.setMonth(d.getMonth()+Number(m||0)); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function echDaysLeft(dstr){ if(!dstr)return null; const d=new Date(dstr+'T00:00:00'); const t=new Date(); t.setHours(0,0,0,0); return Math.round((d-t)/864e5); }
+function echBadge(days,nextStr,label){ if(days==null)return '<div class="muted">—</div>'; let col,txt;
+  if(days<0){ col='#b23b32'; txt='⚠ EXPIRÉ depuis '+(-days)+' j'; } else if(days<=30){ col='#C98A3A'; txt='⏳ '+days+' j restants'; } else { col='#2e7d55'; txt='✔ '+days+' j restants'; }
+  return '<div style="display:inline-block;background:'+col+';color:#fff;padding:6px 12px;border-radius:20px;font-weight:700">'+txt+'</div> <span class="muted">'+label+' : '+esc(nextStr||'—')+'</span>'; }
+function echPreview(){ const last=document.getElementById('etFourLast').value, per=document.getElementById('etFourPer').value; const next=last?echAddMonths(last,per):'';
+  document.getElementById('etFourState').innerHTML = next? echBadge(echDaysLeft(next),next,'Prochain étalonnage') : '<div class="muted">Saisis la date du dernier étalonnage.</div>';
+  const fin=document.getElementById('etOnFin').value;
+  document.getElementById('etOnState').innerHTML = fin? echBadge(echDaysLeft(fin),fin,'Expiration ONSSA') : '<div class="muted">Saisis la date de fin.</div>'; }
+function initEcheances(){ api('getEcheances',{}).then(function(r){ ECH=r.data||{};
+  document.getElementById('etFourLast').value=ECH.fourLast||''; document.getElementById('etFourPer').value=ECH.fourPer||12; document.getElementById('etFourOrg').value=ECH.fourOrg||'';
+  document.getElementById('etOnNum').value=ECH.onNum||''; document.getElementById('etOnDeb').value=ECH.onDeb||''; document.getElementById('etOnFin').value=ECH.onFin||'';
+  echPreview();
+}).catch(function(){ echPreview(); }); }
+function saveEcheances(){ const data={ fourLast:document.getElementById('etFourLast').value, fourPer:Number(document.getElementById('etFourPer').value||12), fourOrg:document.getElementById('etFourOrg').value.trim(),
+    onNum:document.getElementById('etOnNum').value.trim(), onDeb:document.getElementById('etOnDeb').value, onFin:document.getElementById('etOnFin').value };
+  api('saveEcheances',{password:ADMIN_PWD,data:data}).then(function(){ ECH=data; toast('Échéances enregistrées ✔','ok'); }).catch(function(e){toast(e.message,'err');}); }
+function echAttestation(){ const J=window.jspdf; if(!J||!J.jsPDF){toast('PDF indisponible','err');return;}
+  const num=document.getElementById('etOnNum').value, deb=document.getElementById('etOnDeb').value, fin=document.getElementById('etOnFin').value;
+  const fLast=document.getElementById('etFourLast').value, fPer=document.getElementById('etFourPer').value, fOrg=document.getElementById('etFourOrg').value, fNext=fLast?echAddMonths(fLast,fPer):'';
+  const doc=new J.jsPDF({unit:'mm',format:'a4'}); doc.setFillColor(13,44,31);doc.rect(0,0,210,26,'F');doc.setFillColor(201,138,58);doc.rect(0,26,210,1.2,'F');
+  doc.setTextColor(255);doc.setFont('helvetica','bold');doc.setFontSize(16);doc.text('VALORISE MAROC',14,12);
+  doc.setFont('helvetica','normal');doc.setFontSize(11);doc.setTextColor(240,194,116);doc.text('Attestation — conformité & échéances',14,20);
+  doc.setTextColor(20);doc.setFontSize(11); let y=40;
+  doc.setFont('helvetica','bold');doc.text('Autorisation ONSSA',14,y); y+=7; doc.setFont('helvetica','normal');
+  doc.text('N° autorisation : '+(num||'—'),16,y); y+=6;
+  doc.text('Validité : du '+(deb||'—')+' au '+(fin||'—'),16,y); y+=6;
+  const dOn=echDaysLeft(fin); doc.text('Statut : '+(dOn==null?'—':(dOn<0?('EXPIRÉE depuis '+(-dOn)+' j'):(dOn+' j restants'))),16,y); y+=12;
+  doc.setFont('helvetica','bold');doc.text('Étalonnage du four de traitement thermique',14,y); y+=7; doc.setFont('helvetica','normal');
+  doc.text('Dernier étalonnage : '+(fLast||'—')+'    Périodicité : '+(fPer||'—')+' mois',16,y); y+=6;
+  doc.text('Prochain étalonnage : '+(fNext||'—')+'    Organisme/N° : '+(fOrg||'—'),16,y); y+=6;
+  const dF=echDaysLeft(fNext); doc.text('Statut : '+(dF==null?'—':(dF<0?('DÉPASSÉ depuis '+(-dF)+' j'):(dF+' j restants'))),16,y); y+=14;
+  doc.setFontSize(9);doc.text('Producteur ISPM 15 / NIMP 15 — Marquage MA-3483 HT.',14,y); y+=18;
+  doc.text('Fait à Tanger, le '+new Date().toISOString().slice(0,10),14,y);
+  doc.text('Signature & cachet :',130,y); doc.rect(130,y+3,60,22);
+  doc.setFontSize(7);doc.setTextColor(140);doc.text('Valorise Maroc · Zone Franche Tanger · Groupe Fueltec',196,290,{align:'right'});
+  doc.save('Attestation_ONSSA_Etalonnage.pdf'); }
+
 /* ================= OBJECTIFS ================= */
 let OBJ={};
-function objPreview(){ const n=Number(document.getElementById('objNeuf').value||0), r=Number(document.getElementById('objRec').value||0), sh=Number(document.getElementById('objShifts').value||3);
-  document.getElementById('objPreview').textContent='→ Par jour : NEUF '+(n*sh)+' · RECYCLER '+(r*sh)+' (sur '+sh+' shifts).'; }
+function objPreview(){ const n=Number(document.getElementById('objNeuf').value||0), ns=Number(document.getElementById('objNeufShifts').value||0), r=Number(document.getElementById('objRec').value||0), rs=Number(document.getElementById('objRecShifts').value||0);
+  document.getElementById('objPreview').textContent='→ Objectif / jour : NEUF '+(n*ns)+' ('+ns+' shifts × '+n+') · RECYCLER '+(r*rs)+' ('+rs+' shifts × '+r+').'; }
 function initObjectifs(){ api('getObjectifs',{}).then(function(r){ OBJ=r.data||{};
   document.getElementById('objNeuf').value=OBJ.neufShift||''; document.getElementById('objRec').value=OBJ.recShift||'';
-  document.getElementById('objShifts').value=OBJ.shifts||3; document.getElementById('objAbs').value=OBJ.absShiftSem||'';
+  document.getElementById('objNeufShifts').value=(OBJ.neufShifts!=null?OBJ.neufShifts:(OBJ.shifts||3)); document.getElementById('objRecShifts').value=(OBJ.recShifts!=null?OBJ.recShifts:(OBJ.shifts||3));
+  document.getElementById('objAbs').value=OBJ.absShiftSem||'';
   document.getElementById('objPres').value=OBJ.presence||95; document.getElementById('objDispo').value=OBJ.dispo||90;
   document.getElementById('objQual').value=OBJ.qualite||98; document.getElementById('objCad').value=OBJ.cadence||1.5; objPreview();
-  ['objNeuf','objRec','objShifts'].forEach(function(id){ document.getElementById(id).oninput=objPreview; });
+  ['objNeuf','objRec','objNeufShifts','objRecShifts'].forEach(function(id){ document.getElementById(id).oninput=objPreview; });
 }).catch(function(){}); }
 function saveObjectifs(){ const data={ neufShift:Number(document.getElementById('objNeuf').value||0), recShift:Number(document.getElementById('objRec').value||0),
-    shifts:Number(document.getElementById('objShifts').value||3), absShiftSem:Number(document.getElementById('objAbs').value||0),
+    neufShifts:Number(document.getElementById('objNeufShifts').value||0), recShifts:Number(document.getElementById('objRecShifts').value||0),
+    absShiftSem:Number(document.getElementById('objAbs').value||0),
     presence:Number(document.getElementById('objPres').value||95), dispo:Number(document.getElementById('objDispo').value||90),
     qualite:Number(document.getElementById('objQual').value||98), cadence:Number(document.getElementById('objCad').value||1.5) };
   api('saveObjectifs',{password:ADMIN_PWD,data:data}).then(function(){ OBJ=data; toast('Objectifs enregistrés ✔','ok'); }).catch(function(e){toast(e.message,'err');}); }
@@ -4072,8 +4146,8 @@ function dbCard(label,val,sub,color){ return '<div class="kpi" style="background
   +'<div style="font-size:24px;font-weight:800;color:'+(color||'var(--green)')+'">'+val+'</div><div class="muted" style="font-size:12px">'+label+'</div>'+(sub?'<div class="muted" style="font-size:11px">'+sub+'</div>':'')+'</div>'; }
 function loadDashboard(){ const du=document.getElementById('dbDu').value, au=document.getElementById('dbAu').value;
   document.getElementById('dbKpis').innerHTML='<div class="loading"><span class="spin"></span> …</div>';
-  Promise.all([api('getFiches',{du:du,au:au}),api('getLivraisons',{}),api('getStock',{}),api('getFichesAbsence',{}),api('getObjectifs',{})]).then(function(res){
-    const fiches=res[0].rows||[], livs=res[1].rows||[], stock=res[2].rows||[], fabs=res[3].rows||[]; OBJ=res[4].data||OBJ||{};
+  Promise.all([api('getFiches',{du:du,au:au}),api('getLivraisons',{}),api('getStock',{}),api('getFichesAbsence',{}),api('getObjectifs',{}),api('getEcheances',{})]).then(function(res){
+    const fiches=res[0].rows||[], livs=res[1].rows||[], stock=res[2].rows||[], fabs=res[3].rows||[]; OBJ=res[4].data||OBJ||{}; const ech=res[5].data||{};
     // Production : réalisé par type + nb de shifts produits par type (distinct date+shift)
     const byType={NEUF:0,RECYCLER:0}; const shiftsSeen={NEUF:{},RECYCLER:{}};
     fiches.forEach(function(f){ const t=/recycl/i.test(f.Type||'')?'RECYCLER':'NEUF'; byType[t]=(byType[t]||0)+Number(f.TotalRealise||0);
@@ -4090,7 +4164,12 @@ function loadDashboard(){ const du=document.getElementById('dbDu').value, au=doc
     // Stock
     const alertes=stock.filter(function(r){return r.Alerte;}).length; const refs=stock.length;
     const nf=function(n){return String(Math.round(n||0)).replace(/\B(?=(\d{3})+(?!\d))/g,' ');};
-    document.getElementById('dbKpis').innerHTML='<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:4px">'
+    // Alertes échéances (four + ONSSA)
+    const al=[]; const dl=function(s){ if(!s)return null; const d=new Date(s+'T00:00:00'); const t=new Date(); t.setHours(0,0,0,0); return Math.round((d-t)/864e5); };
+    const fNext=ech.fourLast?(function(){ const d=new Date(ech.fourLast+'T00:00:00'); d.setMonth(d.getMonth()+Number(ech.fourPer||12)); return d.toISOString().slice(0,10); })():'';
+    [['Étalonnage four',dl(fNext),fNext],['Autorisation ONSSA',dl(ech.onFin),ech.onFin]].forEach(function(e){ if(e[1]==null)return; if(e[1]<0) al.push(['#b23b32',e[0]+' EXPIRÉ depuis '+(-e[1])+' j ('+e[2]+')']); else if(e[1]<=30) al.push(['#C98A3A',e[0]+' dans '+e[1]+' j ('+e[2]+')']); });
+    const alHtml= al.length? '<div style="margin-bottom:10px">'+al.map(function(a){return '<div style="background:'+a[0]+';color:#fff;padding:8px 12px;border-radius:10px;font-weight:600;margin-bottom:6px">⚠ '+esc(a[1])+'</div>';}).join('')+'</div>' : '';
+    document.getElementById('dbKpis').innerHTML=alHtml+'<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:4px">'
       +dbCard('Production réalisée',nf(real),'objectif '+nf(obj))
       +dbCard('Taux réalisation',Math.round(perf)+'%','(performance)', perf>=90?'#2e7d55':(perf>=70?'#C98A3A':'#b23b32'))
       +dbCard('Livré (période)',nf(livTot),Object.keys(byClient).length+' clients')
