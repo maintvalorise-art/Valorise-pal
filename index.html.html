@@ -1225,6 +1225,40 @@ tr.alert td{background:var(--danger-soft)}
     </div>
   </section>
 
+  <!-- ============ OBJECTIFS (admin) ============ -->
+  <section class="view" data-view="objectifs">
+    <div class="vhead"><div class="eyebrow">Config</div><h2>Objectifs</h2>
+      <p>Cibles utilisées automatiquement par le Tableau de bord (production par shift, absence).</p></div>
+    <div class="admin-body" data-admin="objectifs">
+      <div class="card">
+        <h3>Production — objectif par shift</h3>
+        <div class="grid g3">
+          <div class="field"><label>NEUF (palettes / shift)</label><input type="number" id="objNeuf" min="0" step="10" placeholder="ex. 600"></div>
+          <div class="field"><label>RECYCLER (palettes / shift)</label><input type="number" id="objRec" min="0" step="10" placeholder="ex. 200"></div>
+          <div class="field"><label>Shifts par jour</label><input type="number" id="objShifts" min="1" max="4" step="1" value="3"></div>
+        </div>
+        <p class="muted" id="objPreview" style="font-size:12px;margin-top:4px"></p>
+      </div>
+      <div class="card">
+        <h3>Absence — objectif (plafond)</h3>
+        <div class="grid g3">
+          <div class="field"><label>Absences max / shift / semaine</label><input type="number" id="objAbs" min="0" step="1" placeholder="ex. 1"></div>
+          <div class="field"><label>Présence cible %</label><input type="number" id="objPres" min="0" max="100" step="1" value="95"></div>
+          <div class="field"></div>
+        </div>
+      </div>
+      <div class="card">
+        <h3>OEE — cibles par défaut</h3>
+        <div class="grid g3">
+          <div class="field"><label>Disponibilité %</label><input type="number" id="objDispo" min="0" max="100" step="1" value="90"></div>
+          <div class="field"><label>Qualité %</label><input type="number" id="objQual" min="0" max="100" step="1" value="98"></div>
+          <div class="field"><label>Cadence (min/palette)</label><input type="number" id="objCad" min="0" step="0.1" value="1.5"></div>
+        </div>
+      </div>
+      <button class="btn" style="width:100%" onclick="saveObjectifs()">Enregistrer les objectifs</button>
+    </div>
+  </section>
+
   <!-- ============ IMPORT EXCEL (admin) ============ -->
   <section class="view" data-view="import">
     <div class="vhead"><div class="eyebrow">Migration</div><h2>Import Excel / CSV</h2>
@@ -1262,7 +1296,7 @@ tr.alert td{background:var(--danger-soft)}
   </section>
 </main>
 
-<div class="foot">Valorise — outil interne · <b>version 8.8-SUPABASE · 03-01 · dashboard KPI+OEE</b> · <span id="userTag2"></span></div>
+<div class="foot">Valorise — outil interne · <b>version 8.9-SUPABASE · 03-01 · objectifs auto</b> · <span id="userTag2"></span></div>
 </div><!-- /appWrap -->
 <div class="toast" id="toast"></div>
 
@@ -1351,7 +1385,7 @@ async function sbForgot(){ const em=document.getElementById('lgEmail').value.tri
   if(!em){ msg.textContent='Saisis ton email d\'abord'; return; }
   const {error}=await SB.auth.resetPasswordForEmail(em); msg.textContent=error?('Erreur : '+error.message):'Email de réinitialisation envoyé ✔ (vérifie ta boîte)'; }
 async function sbLogout(){ await SB.auth.signOut(); location.reload(); }
-const WRITE=['saveEmploye','deleteEmploye','saveAffectation','savePlanning','saveAbsence','saveArticle','deleteArticle','saveEntree','saveSortie','saveCommande','saveOrdreProd','saveFiche','deleteFiche','savePoste','deletePoste','saveBom','deleteBom','saveQuotation','setAdminPassword','saveLivraison','savePlanLiv','setBlNext','importLivraisons','updateLivraison','deleteLivraison','clearLivraisons','deleteLivBulk','deleteFicheAbsence','saveTraitement','deleteTraitement','saveCommandesSemaine','saveZ2Mouv','deleteZ2Mouv','saveZ2Article','deleteZ2Article','importZ2','clearZ2','saveNoteTL','saveDemande','deleteDemande','saveContrat','saveInventaire'];
+const WRITE=['saveEmploye','deleteEmploye','saveAffectation','savePlanning','saveAbsence','saveArticle','deleteArticle','saveEntree','saveSortie','saveCommande','saveOrdreProd','saveFiche','deleteFiche','savePoste','deletePoste','saveBom','deleteBom','saveQuotation','setAdminPassword','saveLivraison','savePlanLiv','setBlNext','importLivraisons','updateLivraison','deleteLivraison','clearLivraisons','deleteLivBulk','deleteFicheAbsence','saveTraitement','deleteTraitement','saveCommandesSemaine','saveZ2Mouv','deleteZ2Mouv','saveZ2Article','deleteZ2Article','importZ2','clearZ2','saveNoteTL','saveDemande','deleteDemande','saveContrat','saveInventaire','saveObjectifs'];
 
 async function fb_importLivraisons(p){ const docs=p.docs||[];
   for(var i=0;i<docs.length;i+=400){ const batch=db.batch();
@@ -1422,6 +1456,8 @@ async function route(action,p){
     case 'getNotesTL':     { const s=await db.collection('notesTL').get(); return {ok:true, rows:s.docs.map(function(d){return d.data();})}; }
     case 'getCommandesSemaine':  { const d=await db.collection('commandesSemaine').doc(String(p.week)).get(); return {ok:true, data:(d.exists?d.data():null)}; }
     case 'getContrat':     { const d=await db.collection('contrats').doc('standing').get(); return {ok:true, data:(d.exists?d.data():null)}; }
+    case 'getObjectifs':   { const d=await db.collection('config').doc('objectifs').get(); return {ok:true, data:(d.exists?d.data():null)}; }
+    case 'saveObjectifs':  await db.collection('config').doc('objectifs').set(p.data||{}); return {ok:true};
     case 'saveContrat':    await db.collection('contrats').doc('standing').set({data:p.data||{}}); return {ok:true};
     case 'saveCommandesSemaine': await db.collection('commandesSemaine').doc(String(p.week)).set({week:String(p.week),annee:p.annee,semaine:p.semaine,data:p.data||{},reste:p.reste||{},clients:p.clients||[]}); return {ok:true};
     case 'saveArticle':    return await fb_saveArticle(p);
@@ -1687,7 +1723,7 @@ const MODULES = {
   rh:    {label:'Gestion RH',       tabs:[['employes','Employés'],['affect','Affectation'],['postes','Postes'],['matrice','Matrice'],['recap','Recap abs.'],['abshisto','Fiches absence'],['demrh','Demandes'],['notation','Notation'],['transport','Transport']]},
   stock: {label:'Gestion de Stock', tabs:[['stock','Stock'],['entree','Entrée stock'],['sortie','Sortie stock'],['inventaire','Inventaire'],['livnew','Bon Livraison'],['livreg','Registre BL'],['etatbl','État BL'],['planliv','Planning Livraison'],['articles','Articles']]},
   trt:   {label:'Traitement',        tabs:[['trait','Fiche traitement'],['etattrait','État Traitement']]},
-  config:{label:'Config',           tabs:[['import','Import Excel'],['reglages','Réglages']]}
+  config:{label:'Config',           tabs:[['objectifs','Objectifs'],['import','Import Excel'],['reglages','Réglages']]}
 };
 let ROLE=null, CURMOD=null;
 
@@ -1837,6 +1873,7 @@ function onEnter(v){
   if(v==='histo') initHisto();
   if(v==='etatprod') initEtatProd();
   if(v==='dashboard') initDashboard();
+  if(v==='objectifs') initObjectifs();
   if(v==='etatbl') initEtatBl();
   if(v==='inventaire') initInventaire();
   if(v==='etattrait') initEtatTrait();
@@ -4012,24 +4049,44 @@ function weekRangeDefaults(idDu,idAu){
 let H_ROWS=[];
 function initHisto(){ const d=new Date(); document.getElementById('hDu').value=(d.getFullYear()-1)+'-01-01'; document.getElementById('hAu').value=d.toISOString().slice(0,10); loadHistorique(); }
 
+/* ================= OBJECTIFS ================= */
+let OBJ={};
+function objPreview(){ const n=Number(document.getElementById('objNeuf').value||0), r=Number(document.getElementById('objRec').value||0), sh=Number(document.getElementById('objShifts').value||3);
+  document.getElementById('objPreview').textContent='→ Par jour : NEUF '+(n*sh)+' · RECYCLER '+(r*sh)+' (sur '+sh+' shifts).'; }
+function initObjectifs(){ api('getObjectifs',{}).then(function(r){ OBJ=r.data||{};
+  document.getElementById('objNeuf').value=OBJ.neufShift||''; document.getElementById('objRec').value=OBJ.recShift||'';
+  document.getElementById('objShifts').value=OBJ.shifts||3; document.getElementById('objAbs').value=OBJ.absShiftSem||'';
+  document.getElementById('objPres').value=OBJ.presence||95; document.getElementById('objDispo').value=OBJ.dispo||90;
+  document.getElementById('objQual').value=OBJ.qualite||98; document.getElementById('objCad').value=OBJ.cadence||1.5; objPreview();
+  ['objNeuf','objRec','objShifts'].forEach(function(id){ document.getElementById(id).oninput=objPreview; });
+}).catch(function(){}); }
+function saveObjectifs(){ const data={ neufShift:Number(document.getElementById('objNeuf').value||0), recShift:Number(document.getElementById('objRec').value||0),
+    shifts:Number(document.getElementById('objShifts').value||3), absShiftSem:Number(document.getElementById('objAbs').value||0),
+    presence:Number(document.getElementById('objPres').value||95), dispo:Number(document.getElementById('objDispo').value||90),
+    qualite:Number(document.getElementById('objQual').value||98), cadence:Number(document.getElementById('objCad').value||1.5) };
+  api('saveObjectifs',{password:ADMIN_PWD,data:data}).then(function(){ OBJ=data; toast('Objectifs enregistrés ✔','ok'); }).catch(function(e){toast(e.message,'err');}); }
+
 /* ================= TABLEAU DE BORD KPI ================= */
 function initDashboard(){ const d=new Date(); document.getElementById('dbDu').value=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-01'; document.getElementById('dbAu').value=d.toISOString().slice(0,10); oeeCalc(); oeeDetail(); loadDashboard(); }
 function dbCard(label,val,sub,color){ return '<div class="kpi" style="background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;text-align:center">'
   +'<div style="font-size:24px;font-weight:800;color:'+(color||'var(--green)')+'">'+val+'</div><div class="muted" style="font-size:12px">'+label+'</div>'+(sub?'<div class="muted" style="font-size:11px">'+sub+'</div>':'')+'</div>'; }
 function loadDashboard(){ const du=document.getElementById('dbDu').value, au=document.getElementById('dbAu').value;
   document.getElementById('dbKpis').innerHTML='<div class="loading"><span class="spin"></span> …</div>';
-  Promise.all([api('getFiches',{du:du,au:au}),api('getLivraisons',{}),api('getStock',{}),api('getFichesAbsence',{})]).then(function(res){
-    const fiches=res[0].rows||[], livs=res[1].rows||[], stock=res[2].rows||[], fabs=res[3].rows||[];
-    // Production : réalisé + objectif + par type
-    let real=0,obj=0; const byType={NEUF:0,RECYCLER:0};
-    fiches.forEach(function(f){ real+=Number(f.TotalRealise||0); (f.detail||[]).forEach(function(d){ obj+=Number(d.Objectif||0); });
-      const t=/recycl/i.test(f.Type||'')?'RECYCLER':(/neuf/i.test(f.Type||'')?'NEUF':'NEUF'); byType[t]=(byType[t]||0)+Number(f.TotalRealise||0); });
-    const perf= obj>0?(real/obj*100):0;
+  Promise.all([api('getFiches',{du:du,au:au}),api('getLivraisons',{}),api('getStock',{}),api('getFichesAbsence',{}),api('getObjectifs',{})]).then(function(res){
+    const fiches=res[0].rows||[], livs=res[1].rows||[], stock=res[2].rows||[], fabs=res[3].rows||[]; OBJ=res[4].data||OBJ||{};
+    // Production : réalisé par type + nb de shifts produits par type (distinct date+shift)
+    const byType={NEUF:0,RECYCLER:0}; const shiftsSeen={NEUF:{},RECYCLER:{}};
+    fiches.forEach(function(f){ const t=/recycl/i.test(f.Type||'')?'RECYCLER':'NEUF'; byType[t]=(byType[t]||0)+Number(f.TotalRealise||0);
+      shiftsSeen[t][isoD(f.Date)+'|'+(f.Shift||'')]=1; });
+    const nShiftNeuf=Object.keys(shiftsSeen.NEUF).length, nShiftRec=Object.keys(shiftsSeen.RECYCLER).length;
+    const objNeuf=Number(OBJ.neufShift||0)*nShiftNeuf, objRec=Number(OBJ.recShift||0)*nShiftRec;
+    const real=byType.NEUF+byType.RECYCLER; const obj=objNeuf+objRec; const perf= obj>0?(real/obj*100):0;
+    const objByType={NEUF:objNeuf,RECYCLER:objRec};
     // Livraisons période
     let livTot=0; const byClient={}; livs.forEach(function(b){ const dt=isoD(b.Date); if(du&&dt<du)return; if(au&&dt>au)return; (b.lignes||[]).forEach(function(l){ const q=Number(l.qte||l.Qte||0); livTot+=q; byClient[b.Client]=(byClient[b.Client]||0)+q; }); });
     // RH présence (fiches absence période)
     let eff=0,abs=0; fabs.forEach(function(fa){ const dt=isoD(fa.Date); if(du&&dt<du)return; if(au&&dt>au)return; eff+=Number(fa.effectif||0); abs+=Number(fa.absents||0); });
-    const presence= eff>0?Math.round((eff-abs)/eff*100):0;
+    const presence= eff>0?Math.round((eff-abs)/eff*100):0; const presCible=Number(OBJ.presence||95);
     // Stock
     const alertes=stock.filter(function(r){return r.Alerte;}).length; const refs=stock.length;
     const nf=function(n){return String(Math.round(n||0)).replace(/\B(?=(\d{3})+(?!\d))/g,' ');};
@@ -4037,16 +4094,21 @@ function loadDashboard(){ const du=document.getElementById('dbDu').value, au=doc
       +dbCard('Production réalisée',nf(real),'objectif '+nf(obj))
       +dbCard('Taux réalisation',Math.round(perf)+'%','(performance)', perf>=90?'#2e7d55':(perf>=70?'#C98A3A':'#b23b32'))
       +dbCard('Livré (période)',nf(livTot),Object.keys(byClient).length+' clients')
-      +dbCard('Présence',presence+'%',abs+' absents / '+eff, presence>=90?'#2e7d55':'#C98A3A')
+      +dbCard('Présence',presence+'%','cible '+presCible+'% · '+abs+' abs', presence>=presCible?'#2e7d55':'#C98A3A')
       +dbCard('Fiches prod',fiches.length,'')
       +dbCard('Stock : alertes',alertes,refs+' réfs', alertes>0?'#b23b32':'#2e7d55')
       +'</div>';
-    // auto Performance dans OEE
-    if(perf>0){ document.getElementById('oeePerf').value=Math.round(perf*10)/10; oeeCalc(); }
-    // par type
-    const tt=byType.NEUF+byType.RECYCLER;
-    document.getElementById('dbType').innerHTML='<div class="tbl-wrap"><table><thead><tr><th>Type</th><th>Réalisé</th><th>%</th></tr></thead><tbody>'
-      +[['NEUF',byType.NEUF],['RECYCLER',byType.RECYCLER]].map(function(r){return '<tr><td><b>'+r[0]+'</b></td><td>'+nf(r[1])+'</td><td>'+(tt?Math.round(r[1]/tt*100):0)+'%</td></tr>';}).join('')+'</tbody></table></div>';
+    // auto Performance + défauts OEE depuis objectifs
+    if(perf>0){ document.getElementById('oeePerf').value=Math.round(perf*10)/10; }
+    if(OBJ.dispo) document.getElementById('oeeDispo').value=OBJ.dispo;
+    if(OBJ.qualite) document.getElementById('oeeQual').value=OBJ.qualite;
+    if(OBJ.cadence) document.getElementById('oCad').value=OBJ.cadence;
+    oeeCalc();
+    // par type : Réalisé vs Objectif vs Taux
+    document.getElementById('dbType').innerHTML='<div class="tbl-wrap"><table><thead><tr><th>Type</th><th>Réalisé</th><th>Objectif</th><th>Taux</th></tr></thead><tbody>'
+      +[['NEUF',byType.NEUF,objByType.NEUF],['RECYCLER',byType.RECYCLER,objByType.RECYCLER]].map(function(r){ const tx=r[2]>0?Math.round(r[1]/r[2]*100):0; return '<tr><td><b>'+r[0]+'</b></td><td>'+nf(r[1])+'</td><td>'+nf(r[2])+'</td><td'+(r[2]>0&&tx<90?' style="color:#b23b32;font-weight:700"':'')+'>'+(r[2]>0?tx+'%':'—')+'</td></tr>';}).join('')
+      +'<tr style="background:var(--green-soft);font-weight:700"><td>TOTAL</td><td>'+nf(real)+'</td><td>'+nf(obj)+'</td><td>'+(obj>0?Math.round(real/obj*100):0)+'%</td></tr>'
+      +'</tbody></table></div><p class="muted" style="font-size:11px;margin-top:4px">Objectif = cible/shift × nb de shifts produits (NEUF '+nShiftNeuf+', RECYCLER '+nShiftRec+'). Règle les cibles dans Config ▸ Objectifs.</p>';
     // top clients
     const top=Object.keys(byClient).map(function(c){return {c:c,q:byClient[c]};}).sort(function(a,b){return b.q-a.q;}).slice(0,8);
     document.getElementById('dbTop').innerHTML= top.length? '<div class="tbl-wrap"><table><thead><tr><th>Client</th><th>Livré</th></tr></thead><tbody>'
