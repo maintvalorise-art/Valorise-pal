@@ -458,6 +458,7 @@ tr.alert td{background:var(--danger-soft)}
         <div class="field"><label>Type</label><select id="qcType"><option>NEUF</option><option>RECYCLER</option></select></div>
         <div class="field"><label>Contrôleur qualité</label><select id="qcCtrl"></select></div>
       </div>
+      <div class="info" id="qcChefInfo" style="margin:8px 0">Chef d'équipe (planning) : —</div>
       <div class="info" id="qcProdInfo" style="margin:8px 0">Produit du shift : —</div>
       <h3 style="margin:10px 0 6px">Palettes NOK</h3>
       <div id="qcLines"></div>
@@ -737,6 +738,11 @@ tr.alert td{background:var(--danger-soft)}
           <div class="field"><label>Stock initial (option)</label><input type="number" id="arInit" placeholder="0"></div>
         </div>
         <button class="btn" onclick="saveArticle()">Enregistrer l'article</button>
+        <div class="row-actions" style="margin-top:10px;border-top:1px solid var(--line);padding-top:10px">
+          <button class="btn ghost sm" onclick="artDoublons()">🔎 Chercher les doublons</button>
+          <button class="btn ghost sm" onclick="artGenCovers()">➕ Générer les couvercles équivalents</button>
+        </div>
+        <div id="artTools" style="margin-top:10px"></div>
         <button class="btn ghost" onclick="clearArtForm()">Vider</button>
       </div>
       <div class="card">
@@ -1367,7 +1373,7 @@ tr.alert td{background:var(--danger-soft)}
   </section>
 </main>
 
-<div class="foot">Valorise — outil interne · <b>version 9.4-SUPABASE · 03-01 · qualite shift+controleur</b> · <span id="userTag2"></span></div>
+<div class="foot">Valorise — outil interne · <b>version 9.6-SUPABASE · 03-01 · doublons+covers+ref fiche</b> · <span id="userTag2"></span></div>
 </div><!-- /appWrap -->
 <div class="toast" id="toast"></div>
 
@@ -1456,7 +1462,7 @@ async function sbForgot(){ const em=document.getElementById('lgEmail').value.tri
   if(!em){ msg.textContent='Saisis ton email d\'abord'; return; }
   const {error}=await SB.auth.resetPasswordForEmail(em); msg.textContent=error?('Erreur : '+error.message):'Email de réinitialisation envoyé ✔ (vérifie ta boîte)'; }
 async function sbLogout(){ await SB.auth.signOut(); location.reload(); }
-const WRITE=['saveEmploye','deleteEmploye','saveAffectation','savePlanning','saveAbsence','saveArticle','deleteArticle','saveEntree','saveSortie','saveCommande','saveOrdreProd','saveFiche','deleteFiche','savePoste','deletePoste','saveBom','deleteBom','saveQuotation','setAdminPassword','saveLivraison','savePlanLiv','setBlNext','importLivraisons','updateLivraison','deleteLivraison','clearLivraisons','deleteLivBulk','deleteFicheAbsence','saveTraitement','deleteTraitement','saveCommandesSemaine','saveZ2Mouv','deleteZ2Mouv','saveZ2Article','deleteZ2Article','importZ2','clearZ2','saveNoteTL','saveDemande','deleteDemande','saveContrat','saveInventaire','saveObjectifs','saveEcheances','saveQualite','deleteQualite'];
+const WRITE=['saveEmploye','deleteEmploye','saveAffectation','savePlanning','saveAbsence','saveArticle','deleteArticle','saveEntree','saveSortie','saveCommande','saveOrdreProd','saveFiche','deleteFiche','savePoste','deletePoste','saveBom','deleteBom','saveQuotation','setAdminPassword','saveLivraison','savePlanLiv','setBlNext','importLivraisons','updateLivraison','deleteLivraison','clearLivraisons','deleteLivBulk','deleteFicheAbsence','saveTraitement','deleteTraitement','saveCommandesSemaine','saveZ2Mouv','deleteZ2Mouv','saveZ2Article','deleteZ2Article','importZ2','clearZ2','saveNoteTL','saveDemande','deleteDemande','saveContrat','saveInventaire','saveObjectifs','saveEcheances','saveQualite','deleteQualite','saveArticlesBulk'];
 
 async function fb_importLivraisons(p){ const docs=p.docs||[];
   for(var i=0;i<docs.length;i+=400){ const batch=db.batch();
@@ -1538,6 +1544,7 @@ async function route(action,p){
     case 'saveCommandesSemaine': await db.collection('commandesSemaine').doc(String(p.week)).set({week:String(p.week),annee:p.annee,semaine:p.semaine,data:p.data||{},reste:p.reste||{},clients:p.clients||[]}); return {ok:true};
     case 'saveArticle':    return await fb_saveArticle(p);
     case 'deleteArticle':  await db.collection('articles').doc(String(p.ref)).delete(); return {ok:true};
+    case 'saveArticlesBulk': { const rows=p.rows||[]; for(var i=0;i<rows.length;i+=300){ const b=db.batch(); rows.slice(i,i+300).forEach(function(a){ b.set(db.collection('articles').doc(String(a.Ref)),a); }); await b.commit(); } return {ok:true,n:rows.length}; }
     case 'saveEntree':     return await fb_saveEntree(p);
     case 'saveSortie':     return await fb_saveSortie(p);
     case 'getStock':       return await fb_getStock(p);
@@ -2136,6 +2143,9 @@ async function doSaveFiche(){
   if(!f.chef){ toast('Choisis le chef d\'équipe','err'); return null; }
   const hasProd=f.postes.some(function(p){return p.prod&&p.ref&&Number(p.qte)>0;});
   if(!hasProd){ toast('Saisis au moins un poste produit (réf + qté)','err'); return null; }
+  const _codes={}; S.art.forEach(function(a){ _codes[norm(a.Ref)]=1; });
+  const _bad=f.postes.filter(function(p){ return p.prod&&p.ref&&!_codes[norm(p.ref)]; });
+  if(_bad.length){ toast('Réf inconnue dans les Articles : '+_bad.map(function(p){return p.ref;}).join(', ')+' — choisis dans la liste','err'); return null; }
   try{ const d=await api('saveFiche',Object.assign({ficheId:CURFICHE},f));
     f.ficheId=d.ficheId; f.total=d.total; LAST_FICHE=f; FICHE_SAVED_ID=d.ficheId; return f;
   }catch(err){ toast(err.message,'err'); return null; }
@@ -2402,6 +2412,35 @@ function savePlanning(){
 }
 
 /* ================= ARTICLES ================= */
+function artDoublons(){ const box=document.getElementById('artTools');
+  const byDes={}, byRef={}; S.art.forEach(function(a){ const d=norm(a.Designation); if(d){(byDes[d]=byDes[d]||[]).push(a);} const r=norm(a.Ref); if(r){(byRef[r]=byRef[r]||[]).push(a);} });
+  const dupDes=Object.keys(byDes).filter(function(k){return byDes[k].length>1;});
+  const dupRef=Object.keys(byRef).filter(function(k){return byRef[k].length>1;});
+  if(!dupDes.length && !dupRef.length){ box.innerHTML='<div class="info">Aucun doublon trouvé ✔</div>'; return; }
+  let h='<div class="card" style="border:1px solid var(--gold)"><h3>Doublons détectés</h3>';
+  if(dupDes.length){ h+='<p class="muted" style="font-size:12px">Même désignation :</p><div class="tbl-wrap"><table><thead><tr><th>Désignation</th><th>Réfs</th><th></th></tr></thead><tbody>'
+    +dupDes.map(function(k){ const list=byDes[k]; return '<tr><td>'+esc(list[0].Designation)+'</td><td>'+list.map(function(a){return esc(a.Ref);}).join(', ')+'</td>'
+      +'<td style="white-space:nowrap">'+list.slice(1).map(function(a){return '<button class="btn link" onclick="delArt(\''+esc(a.Ref)+'\')">✕ '+esc(a.Ref)+'</button>';}).join(' ')+'</td></tr>'; }).join('')+'</tbody></table></div>'; }
+  if(dupRef.length){ h+='<p class="muted" style="font-size:12px;margin-top:8px">Même référence (doublon réel) :</p><div class="tbl-wrap"><table><tbody>'
+    +dupRef.map(function(k){ return '<tr><td>'+esc(byRef[k][0].Ref)+' ('+byRef[k].length+'×)</td></tr>'; }).join('')+'</tbody></table></div>'; }
+  h+='<p class="muted" style="font-size:11px">Clique ✕ pour supprimer les copies (la 1re est gardée). Vérifie avant de supprimer.</p></div>';
+  box.innerHTML=h; }
+function artMes(a){ return a.Mesure || coMesFrom(a) || ''; }
+function artGenCovers(){ const box=document.getElementById('artTools');
+  const pf=S.art.filter(function(a){ return isPF(a) && !/couvercle|cover/i.test((a.Designation||'')+' '+(a.Ref||'')); });
+  const existCov={}; S.art.forEach(function(a){ if(/couvercle|cover/i.test((a.Designation||'')+' '+(a.Ref||''))){ existCov[norm(artMes(a))]=1; } });
+  const toCreate=[]; pf.forEach(function(a){ const mes=artMes(a); const covRef=String(a.Ref)+'-COV';
+    if(S.art.some(function(x){return String(x.Ref)===covRef;})) return; // déjà
+    toCreate.push({Ref:covRef, Designation:'Couvercle '+(mes||a.Designation||''), Famille:a.Famille||'Produit fini', Unite:a.Unite||'U', TypePalette:a.TypePalette||'', Mesure:mes, StockMin:0, StockInitial:0}); });
+  if(!toCreate.length){ box.innerHTML='<div class="info">Rien à générer : chaque palette a déjà son couvercle (-COV) ✔</div>'; return; }
+  box.innerHTML='<div class="card" style="border:1px solid var(--green)"><h3>'+toCreate.length+' couvercle(s) à créer</h3>'
+    +'<div class="tbl-wrap"><table><thead><tr><th>Réf couvercle</th><th>Désignation</th><th>Mesure</th></tr></thead><tbody>'
+    +toCreate.slice(0,200).map(function(c){return '<tr><td><b>'+esc(c.Ref)+'</b></td><td>'+esc(c.Designation)+'</td><td>'+esc(c.Mesure)+'</td></tr>';}).join('')+'</tbody></table></div>'
+    +'<button class="btn" style="width:100%;margin-top:8px" onclick="artGenCoversDo()">Créer ces '+toCreate.length+' couvercles</button></div>';
+  window.__COVERS=toCreate; }
+function artGenCoversDo(){ const rows=window.__COVERS||[]; if(!rows.length)return; toast('Création…');
+  api('saveArticlesBulk',{password:ADMIN_PWD,rows:rows}).then(function(r){ rows.forEach(function(a){ if(!S.art.some(function(x){return String(x.Ref)===a.Ref;})) S.art.push(a); });
+    document.getElementById('artTools').innerHTML='<div class="info">'+(r.n||rows.length)+' couvercle(s) créé(s) ✔</div>'; renderArticles(); toast('Couvercles créés ✔','ok'); }).catch(function(e){toast(e.message,'err');}); }
 function saveArticle(){
   const art={Ref:document.getElementById('arRef').value.trim(),Designation:document.getElementById('arDes').value.trim(),
     Famille:document.getElementById('arFam').value,Unite:document.getElementById('arUnite').value.trim(),
@@ -3244,16 +3283,23 @@ function demForDate(empId, dateStr){ const d=isoD(dateStr); let res=null;
 
 /* ================= CONTRÔLE QUALITÉ ================= */
 const QC_MOTIFS=['Clou saillant','Fissure / éclat','Dimension hors tolérance','Humidité','Assemblage','Bois défectueux','Autre'];
-let QC_FICHES=[], QC_LOTS=[];
+let QC_FICHES=[], QC_LOTS=[], QC_PLANNING=[];
+function qcChefLookup(){ const date=document.getElementById('qcDate').value, sh=document.getElementById('qcShift').value, eq=document.getElementById('qcEq').value; const el=document.getElementById('qcChefInfo'); if(!el)return;
+  if(!date){ el.textContent='Chef d\'équipe (planning) : —'; el.dataset.chef=''; return; }
+  const wk=isoWeek(date); const rows=QC_PLANNING.filter(function(p){ return Number(p.Annee)===wk.annee && Number(p.Semaine)===wk.semaine && String(p.Shift)===String(sh) && (!eq||p.Equipe===eq) && p.ChefEquipe; });
+  const chefs=Array.from(new Set(rows.map(function(p){return p.ChefEquipe+' ('+eqLabel(p.Equipe)+')';})));
+  const names=Array.from(new Set(rows.map(function(p){return p.ChefEquipe;})));
+  el.innerHTML='Chef d\'équipe (planning) : <b>'+(chefs.length?chefs.map(esc).join(', '):'— aucun chef planifié ce shift —')+'</b>'; el.dataset.chef=names.join(', '); }
 function initQualite(){ const el=document.getElementById('qcDate'); if(el&&!el.value) el.value=S.today;
   document.getElementById('qcEq').innerHTML='<option value="">Toutes les équipes</option>'+EQUIPES.map(function(e){return '<option value="'+esc(e)+'">'+esc(eqLabel(e))+'</option>';}).join('');
+  api('getPlanningAll',{}).then(function(r){ QC_PLANNING=r.rows||[]; qcChefLookup(); }).catch(function(){ QC_PLANNING=[]; });
   const emps=(S.emp||[]).slice().sort(function(a,b){return String(a.Nom).localeCompare(String(b.Nom));});
   document.getElementById('qcCtrl').innerHTML='<option value="">— contrôleur —</option>'+emps.map(function(e){return '<option value="'+esc(e.Nom)+'">'+esc(e.Nom)+' ('+esc(e.ID)+')</option>';}).join('');
   if(!document.getElementById('qcLines').children.length) qcAddLine();
   qcProd(); loadQcList();
 }
 function qcProd(){ const date=document.getElementById('qcDate').value, sh=document.getElementById('qcShift').value, eq=document.getElementById('qcEq').value;
-  const info=document.getElementById('qcProdInfo');
+  qcChefLookup(); const info=document.getElementById('qcProdInfo');
   if(!date){ info.textContent='Produit du shift : — (choisis la date)'; QC_LOTS=[]; qcFillLots(); return; }
   api('getFiches',{du:date,au:date}).then(function(r){ const fs=(r.rows||[]).filter(function(f){ return isoD(f.Date)===date && String(f.Shift)===String(sh) && (!eq || f.Equipe===eq); });
     const prod=fs.reduce(function(s,f){return s+Number(f.TotalRealise||0);},0); QC_FICHES=fs; QC_LOTS=fs.map(function(f){return f.FicheID;});
@@ -3275,7 +3321,7 @@ function qcGather(){ const lignes=[];
   [].forEach.call(document.querySelectorAll('#qcLines .qc-row'),function(r){ const lot=r.querySelector('.qcLot').value, ref=r.querySelector('.qcRef').value.trim(), qte=Number(r.querySelector('.qcQte').value||0), motif=r.querySelector('.qcMotif').value, stamp=r.querySelector('.qcStamp').value.trim();
     if(qte>0) lignes.push({lot:(lot==='__'?'':lot),ref:ref,qte:qte,motif:motif,stamp:stamp}); });
   const prod=Number(document.getElementById('qcProdInfo').dataset.prod||0); const nok=lignes.reduce(function(s,l){return s+l.qte;},0);
-  return { Date:document.getElementById('qcDate').value, Equipe:document.getElementById('qcEq').value, Shift:document.getElementById('qcShift').value, Controleur:document.getElementById('qcCtrl').value, Type:document.getElementById('qcType').value, Produit:prod, NOK:nok, lignes:lignes }; }
+  return { Date:document.getElementById('qcDate').value, Equipe:document.getElementById('qcEq').value, Shift:document.getElementById('qcShift').value, Chef:(document.getElementById('qcChefInfo').dataset.chef||''), Controleur:document.getElementById('qcCtrl').value, Type:document.getElementById('qcType').value, Produit:prod, NOK:nok, lignes:lignes }; }
 function qcSave(){ const rec=qcGather(); if(!rec.Date){toast('Date requise','err');return;} if(!rec.Controleur){toast('Choisis le contrôleur','err');return;} if(!rec.lignes.length){toast('Ajoute au moins une ligne NOK (qté>0)','err');return;}
   api('saveQualite',{password:ADMIN_PWD,rec:rec}).then(function(){ toast('Contrôle qualité enregistré ✔','ok'); document.getElementById('qcLines').innerHTML=''; qcAddLine(); qcTotals(); loadQcList(); }).catch(function(e){toast(e.message,'err');}); }
 function loadQcList(){ api('getQualite',{}).then(function(r){ const rows=(r.rows||[]).sort(function(a,b){return (a.Date<b.Date?1:-1);}).slice(0,30);
