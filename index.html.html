@@ -1130,6 +1130,47 @@ tr.alert td{background:var(--danger-soft)}
   </section>
 
   <!-- ============ HISTORIQUE FICHES (admin) ============ -->
+  <!-- ============ TABLEAU DE BORD KPI (admin) ============ -->
+  <section class="view" data-view="dashboard">
+    <div class="vhead"><div class="eyebrow">Direction</div><h2>Tableau de bord</h2>
+      <p>Vue d'ensemble Production · RH · Stock · Livraisons, et calcul de l'OEE / TRS.</p></div>
+    <div class="admin-body" data-admin="dashboard">
+      <div class="card">
+        <div class="grid g3" style="margin-bottom:6px">
+          <div class="field"><label>Du</label><input type="date" id="dbDu"></div>
+          <div class="field"><label>Au</label><input type="date" id="dbAu"></div>
+          <div class="field" style="align-self:end"><button class="btn ghost" onclick="loadDashboard()">Actualiser</button></div>
+        </div>
+      </div>
+      <div id="dbKpis"></div>
+      <div class="grid g2">
+        <div class="card"><h3>Production par type</h3><div id="dbType"></div></div>
+        <div class="card"><h3>Top clients (livré)</h3><div id="dbTop"></div></div>
+      </div>
+      <div class="card" style="border:2px solid var(--green)">
+        <h3>OEE / TRS — Taux de Rendement Synthétique</h3>
+        <p class="muted" style="margin-top:0;font-size:12px">OEE = Disponibilité × Performance × Qualité. La Performance est calculée automatiquement (réalisé / objectif) ; ajuste Disponibilité et Qualité.</p>
+        <div class="grid g3">
+          <div class="field"><label>Disponibilité %</label><input type="number" id="oeeDispo" value="90" min="0" max="100" step="0.1" oninput="oeeCalc()"></div>
+          <div class="field"><label>Performance % (auto)</label><input type="number" id="oeePerf" min="0" max="200" step="0.1" oninput="oeeCalc()"></div>
+          <div class="field"><label>Qualité %</label><input type="number" id="oeeQual" value="98" min="0" max="100" step="0.1" oninput="oeeCalc()"></div>
+        </div>
+        <div id="oeeOut" style="text-align:center;margin-top:10px"></div>
+        <details style="margin-top:10px"><summary class="muted" style="cursor:pointer;font-size:13px">Calculateur détaillé (temps, cadence, conformes)</summary>
+          <div class="grid g3" style="margin-top:10px">
+            <div class="field"><label>Temps planifié (min)</label><input type="number" id="oTp" value="450" oninput="oeeDetail()"></div>
+            <div class="field"><label>Arrêts (min)</label><input type="number" id="oArr" value="45" oninput="oeeDetail()"></div>
+            <div class="field"><label>Cadence (min/palette)</label><input type="number" id="oCad" value="1.5" step="0.1" oninput="oeeDetail()"></div>
+            <div class="field"><label>Production réelle</label><input type="number" id="oReal" value="240" oninput="oeeDetail()"></div>
+            <div class="field"><label>Palettes conformes</label><input type="number" id="oOk" value="235" oninput="oeeDetail()"></div>
+            <div class="field" style="align-self:end"><button class="btn ghost sm" onclick="oeeApplyDetail()">Appliquer ↑</button></div>
+          </div>
+          <div id="oeeDetailOut" class="muted" style="font-size:13px;margin-top:6px"></div>
+        </details>
+      </div>
+    </div>
+  </section>
+
   <section class="view" data-view="etatprod">
     <div class="vhead"><div class="eyebrow">Production</div><h2>État de production</h2>
       <p>NEUF &amp; RECYCLER séparés — par produit, type palette, shift et date.</p></div>
@@ -1221,7 +1262,7 @@ tr.alert td{background:var(--danger-soft)}
   </section>
 </main>
 
-<div class="foot">Valorise — outil interne · <b>version 8.7-SUPABASE · 03-01 · etat BL pro</b> · <span id="userTag2"></span></div>
+<div class="foot">Valorise — outil interne · <b>version 8.8-SUPABASE · 03-01 · dashboard KPI+OEE</b> · <span id="userTag2"></span></div>
 </div><!-- /appWrap -->
 <div class="toast" id="toast"></div>
 
@@ -1641,6 +1682,7 @@ const VIEWS = {
   zone2:[['z2imp','Import tickets'],['z2recep','Réception'],['z2liv','Livraison'],['z2stock','Stock'],['z2art','Articles'],['absence','Absence']]
 };
 const MODULES = {
+  dash:  {label:'📊 Tableau de bord', tabs:[['dashboard','KPI']]},
   prod:  {label:'Gestion Prod',     tabs:[['contrat','Contrats'],['suivicmd','Suivi Cmd'],['configpal','Configurateur'],['ordre','Ordre de Prod'],['bom','BOM'],['devis','Devis'],['recapprod','Recap Prod'],['etatprod','État Prod'],['histo','Historique'],['kpi','KPI']]},
   rh:    {label:'Gestion RH',       tabs:[['employes','Employés'],['affect','Affectation'],['postes','Postes'],['matrice','Matrice'],['recap','Recap abs.'],['abshisto','Fiches absence'],['demrh','Demandes'],['notation','Notation'],['transport','Transport']]},
   stock: {label:'Gestion de Stock', tabs:[['stock','Stock'],['entree','Entrée stock'],['sortie','Sortie stock'],['inventaire','Inventaire'],['livnew','Bon Livraison'],['livreg','Registre BL'],['etatbl','État BL'],['planliv','Planning Livraison'],['articles','Articles']]},
@@ -1753,7 +1795,7 @@ function enterRole(role){
   document.getElementById('navbar').style.display='block';
   document.getElementById('backBtn').style.display='inline-flex';
   document.getElementById('roleLabel').textContent = role==='tl'?'Team Leader':(role==='liv'?'Traitement & Shipping':(role==='zone2'?'Zone 2':'Admin'));
-  if(role==='admin'){ document.getElementById('modbar').style.display='flex'; buildModBar(); selectModule('prod'); }
+  if(role==='admin'){ document.getElementById('modbar').style.display='flex'; buildModBar(); selectModule('dash'); }
   else { document.getElementById('modbar').style.display='none'; const list=VIEWS[role]||VIEWS.tl; buildTabsFrom(list); openView(list[0][0]); }
   window.scrollTo(0,0);
 }
@@ -1794,6 +1836,7 @@ function onEnter(v){
   if(v==='reglages') loadReglages();
   if(v==='histo') initHisto();
   if(v==='etatprod') initEtatProd();
+  if(v==='dashboard') initDashboard();
   if(v==='etatbl') initEtatBl();
   if(v==='inventaire') initInventaire();
   if(v==='etattrait') initEtatTrait();
@@ -3712,7 +3755,7 @@ function ebExcel(){ if(!EB_LAST.cli.length){toast('Rien à exporter','err');retu
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet([{'Total général':EB_LAST.tot}]), 'Total');
   XLSX.writeFile(wb,'Etat_livraisons.xlsx'); }
 function ebPdf(){ if(!EB_LAST.cli.length){toast('Rien à exporter','err');return;} const J=window.jspdf; if(!J||!J.jsPDF){toast('PDF indisponible','err');return;}
-  const nf=function(n){ return new Intl.NumberFormat('fr-FR').format(Math.round(n||0)); };
+  const nf=function(n){ return String(Math.round(n||0)).replace(/\B(?=(\d{3})+(?!\d))/g,' '); };
   const du=document.getElementById('ebDu').value, au=document.getElementById('ebAu').value, tot=EB_LAST.tot||0;
   const nbBons=EB_LAST.cli.reduce(function(s,x){return s+(x.Bons||0);},0);
   const pct=function(v){ return tot?Math.round(v/tot*100):0; };
@@ -3968,6 +4011,57 @@ function weekRangeDefaults(idDu,idAu){
 /* ================= HISTORIQUE FICHES ================= */
 let H_ROWS=[];
 function initHisto(){ const d=new Date(); document.getElementById('hDu').value=(d.getFullYear()-1)+'-01-01'; document.getElementById('hAu').value=d.toISOString().slice(0,10); loadHistorique(); }
+
+/* ================= TABLEAU DE BORD KPI ================= */
+function initDashboard(){ const d=new Date(); document.getElementById('dbDu').value=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-01'; document.getElementById('dbAu').value=d.toISOString().slice(0,10); oeeCalc(); oeeDetail(); loadDashboard(); }
+function dbCard(label,val,sub,color){ return '<div class="kpi" style="background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;text-align:center">'
+  +'<div style="font-size:24px;font-weight:800;color:'+(color||'var(--green)')+'">'+val+'</div><div class="muted" style="font-size:12px">'+label+'</div>'+(sub?'<div class="muted" style="font-size:11px">'+sub+'</div>':'')+'</div>'; }
+function loadDashboard(){ const du=document.getElementById('dbDu').value, au=document.getElementById('dbAu').value;
+  document.getElementById('dbKpis').innerHTML='<div class="loading"><span class="spin"></span> …</div>';
+  Promise.all([api('getFiches',{du:du,au:au}),api('getLivraisons',{}),api('getStock',{}),api('getFichesAbsence',{})]).then(function(res){
+    const fiches=res[0].rows||[], livs=res[1].rows||[], stock=res[2].rows||[], fabs=res[3].rows||[];
+    // Production : réalisé + objectif + par type
+    let real=0,obj=0; const byType={NEUF:0,RECYCLER:0};
+    fiches.forEach(function(f){ real+=Number(f.TotalRealise||0); (f.detail||[]).forEach(function(d){ obj+=Number(d.Objectif||0); });
+      const t=/recycl/i.test(f.Type||'')?'RECYCLER':(/neuf/i.test(f.Type||'')?'NEUF':'NEUF'); byType[t]=(byType[t]||0)+Number(f.TotalRealise||0); });
+    const perf= obj>0?(real/obj*100):0;
+    // Livraisons période
+    let livTot=0; const byClient={}; livs.forEach(function(b){ const dt=isoD(b.Date); if(du&&dt<du)return; if(au&&dt>au)return; (b.lignes||[]).forEach(function(l){ const q=Number(l.qte||l.Qte||0); livTot+=q; byClient[b.Client]=(byClient[b.Client]||0)+q; }); });
+    // RH présence (fiches absence période)
+    let eff=0,abs=0; fabs.forEach(function(fa){ const dt=isoD(fa.Date); if(du&&dt<du)return; if(au&&dt>au)return; eff+=Number(fa.effectif||0); abs+=Number(fa.absents||0); });
+    const presence= eff>0?Math.round((eff-abs)/eff*100):0;
+    // Stock
+    const alertes=stock.filter(function(r){return r.Alerte;}).length; const refs=stock.length;
+    const nf=function(n){return String(Math.round(n||0)).replace(/\B(?=(\d{3})+(?!\d))/g,' ');};
+    document.getElementById('dbKpis').innerHTML='<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:4px">'
+      +dbCard('Production réalisée',nf(real),'objectif '+nf(obj))
+      +dbCard('Taux réalisation',Math.round(perf)+'%','(performance)', perf>=90?'#2e7d55':(perf>=70?'#C98A3A':'#b23b32'))
+      +dbCard('Livré (période)',nf(livTot),Object.keys(byClient).length+' clients')
+      +dbCard('Présence',presence+'%',abs+' absents / '+eff, presence>=90?'#2e7d55':'#C98A3A')
+      +dbCard('Fiches prod',fiches.length,'')
+      +dbCard('Stock : alertes',alertes,refs+' réfs', alertes>0?'#b23b32':'#2e7d55')
+      +'</div>';
+    // auto Performance dans OEE
+    if(perf>0){ document.getElementById('oeePerf').value=Math.round(perf*10)/10; oeeCalc(); }
+    // par type
+    const tt=byType.NEUF+byType.RECYCLER;
+    document.getElementById('dbType').innerHTML='<div class="tbl-wrap"><table><thead><tr><th>Type</th><th>Réalisé</th><th>%</th></tr></thead><tbody>'
+      +[['NEUF',byType.NEUF],['RECYCLER',byType.RECYCLER]].map(function(r){return '<tr><td><b>'+r[0]+'</b></td><td>'+nf(r[1])+'</td><td>'+(tt?Math.round(r[1]/tt*100):0)+'%</td></tr>';}).join('')+'</tbody></table></div>';
+    // top clients
+    const top=Object.keys(byClient).map(function(c){return {c:c,q:byClient[c]};}).sort(function(a,b){return b.q-a.q;}).slice(0,8);
+    document.getElementById('dbTop').innerHTML= top.length? '<div class="tbl-wrap"><table><thead><tr><th>Client</th><th>Livré</th></tr></thead><tbody>'
+      +top.map(function(x){return '<tr><td>'+esc(x.c)+'</td><td>'+nf(x.q)+'</td></tr>';}).join('')+'</tbody></table></div>' : '<div class="empty">Aucune livraison.</div>';
+  }).catch(function(e){ document.getElementById('dbKpis').innerHTML='<div class="warnbox">'+esc(e.message)+'</div>'; });
+}
+function oeeCalc(){ const d=Number(document.getElementById('oeeDispo').value||0)/100, p=Number(document.getElementById('oeePerf').value||0)/100, q=Number(document.getElementById('oeeQual').value||0)/100;
+  const oee=d*p*q*100; const col= oee>=75?'#2e7d55':(oee>=60?'#C98A3A':'#b23b32');
+  document.getElementById('oeeOut').innerHTML='<div style="font-size:38px;font-weight:800;color:'+col+'">OEE '+(isFinite(oee)?oee.toFixed(1):'0')+'%</div>'
+    +'<div class="muted" style="font-size:13px">Disponibilité '+(d*100).toFixed(0)+'% × Performance '+(p*100).toFixed(0)+'% × Qualité '+(q*100).toFixed(0)+'%</div>'; }
+function oeeDetail(){ const tp=Number(document.getElementById('oTp').value||0), ar=Number(document.getElementById('oArr').value||0), cad=Number(document.getElementById('oCad').value||0), real=Number(document.getElementById('oReal').value||0), ok=Number(document.getElementById('oOk').value||0);
+  const run=tp-ar; const dispo= tp>0?run/tp*100:0; const theo= cad>0?run/cad:0; const perf= theo>0?real/theo*100:0; const qual= real>0?ok/real*100:0; const oee=dispo/100*perf/100*qual/100*100;
+  document.getElementById('oeeDetailOut').innerHTML='Fonctionnement '+run+' min · Prod théorique '+Math.round(theo)+' · Dispo '+dispo.toFixed(1)+'% · Perf '+perf.toFixed(1)+'% · Qualité '+qual.toFixed(1)+'% → <b>OEE '+oee.toFixed(1)+'%</b>';
+  window.__oee={dispo:dispo,perf:perf,qual:qual}; }
+function oeeApplyDetail(){ if(!window.__oee)oeeDetail(); const o=window.__oee; document.getElementById('oeeDispo').value=o.dispo.toFixed(1); document.getElementById('oeePerf').value=o.perf.toFixed(1); document.getElementById('oeeQual').value=o.qual.toFixed(1); oeeCalc(); }
 
 /* ================= ÉTAT DE PRODUCTION ================= */
 let EP_ROWS=[];
