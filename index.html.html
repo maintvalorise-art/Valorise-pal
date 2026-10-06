@@ -1375,7 +1375,7 @@ tr.alert td{background:var(--danger-soft)}
   </section>
 </main>
 
-<div class="foot">Valorise — outil interne · <b>version 9.8-SUPABASE · 03-01 · fiche zone+type</b> · <span id="userTag2"></span></div>
+<div class="foot">Valorise — outil interne · <b>version 9.9-SUPABASE · 03-01 · qualite auto lignes+controleur</b> · <span id="userTag2"></span></div>
 </div><!-- /appWrap -->
 <div class="toast" id="toast"></div>
 
@@ -1464,7 +1464,7 @@ async function sbForgot(){ const em=document.getElementById('lgEmail').value.tri
   if(!em){ msg.textContent='Saisis ton email d\'abord'; return; }
   const {error}=await SB.auth.resetPasswordForEmail(em); msg.textContent=error?('Erreur : '+error.message):'Email de réinitialisation envoyé ✔ (vérifie ta boîte)'; }
 async function sbLogout(){ await SB.auth.signOut(); location.reload(); }
-const WRITE=['saveEmploye','deleteEmploye','saveAffectation','savePlanning','saveAbsence','saveArticle','deleteArticle','saveEntree','saveSortie','saveCommande','saveOrdreProd','saveFiche','deleteFiche','savePoste','deletePoste','saveBom','deleteBom','saveQuotation','setAdminPassword','saveLivraison','savePlanLiv','setBlNext','importLivraisons','updateLivraison','deleteLivraison','clearLivraisons','deleteLivBulk','deleteFicheAbsence','saveTraitement','deleteTraitement','saveCommandesSemaine','saveZ2Mouv','deleteZ2Mouv','saveZ2Article','deleteZ2Article','importZ2','clearZ2','saveNoteTL','saveDemande','deleteDemande','saveContrat','saveInventaire','saveObjectifs','saveEcheances','saveQualite','deleteQualite','saveArticlesBulk'];
+const WRITE=['saveEmploye','deleteEmploye','saveAffectation','savePlanning','saveAbsence','saveArticle','deleteArticle','saveEntree','saveSortie','saveCommande','saveOrdreProd','saveFiche','deleteFiche','savePoste','deletePoste','saveBom','deleteBom','saveQuotation','setAdminPassword','saveLivraison','savePlanLiv','setBlNext','importLivraisons','updateLivraison','deleteLivraison','clearLivraisons','deleteLivBulk','deleteFicheAbsence','saveTraitement','deleteTraitement','saveCommandesSemaine','saveZ2Mouv','deleteZ2Mouv','saveZ2Article','deleteZ2Article','importZ2','clearZ2','saveNoteTL','saveDemande','deleteDemande','saveContrat','saveInventaire','saveObjectifs','saveEcheances','saveQualite','deleteQualite','saveArticlesBulk','saveQcCtrl'];
 
 async function fb_importLivraisons(p){ const docs=p.docs||[];
   for(var i=0;i<docs.length;i+=400){ const batch=db.batch();
@@ -1540,6 +1540,8 @@ async function route(action,p){
     case 'getQualite':     { const s=await db.collection('qualite').get(); return {ok:true, rows:s.docs.map(function(d){return Object.assign({QID:d.id},d.data());})}; }
     case 'saveQualite':    { const id=(p.rec&&p.rec.QID)||uid('QC-'); await db.collection('qualite').doc(id).set(Object.assign({},p.rec,{QID:id})); return {ok:true,id:id}; }
     case 'deleteQualite':  if(p.id) await db.collection('qualite').doc(String(p.id)).delete(); return {ok:true};
+    case 'getQcCtrl':      { const d=await db.collection('config').doc('qcControleurs').get(); return {ok:true, data:(d.exists?d.data():null)}; }
+    case 'saveQcCtrl':     await db.collection('config').doc('qcControleurs').set(p.data||{}); return {ok:true};
     case 'getEcheances':   { const d=await db.collection('config').doc('echeances').get(); return {ok:true, data:(d.exists?d.data():null)}; }
     case 'saveEcheances':  await db.collection('config').doc('echeances').set(p.data||{}); return {ok:true};
     case 'saveContrat':    await db.collection('contrats').doc('standing').set({data:p.data||{}}); return {ok:true};
@@ -3292,7 +3294,7 @@ function demForDate(empId, dateStr){ const d=isoD(dateStr); let res=null;
 
 /* ================= CONTRÔLE QUALITÉ ================= */
 const QC_MOTIFS=['Clou saillant','Fissure / éclat','Dimension hors tolérance','Humidité','Assemblage','Bois défectueux','Autre'];
-let QC_FICHES=[], QC_LOTS=[], QC_PLANNING=[];
+let QC_FICHES=[], QC_LOTS=[], QC_PLANNING=[], QC_CTRL={};
 function qcChefLookup(){ const date=document.getElementById('qcDate').value, sh=document.getElementById('qcShift').value, eq=document.getElementById('qcEq').value; const el=document.getElementById('qcChefInfo'); if(!el)return;
   if(!date){ el.textContent='Chef d\'équipe (planning) : —'; el.dataset.chef=''; return; }
   const wk=isoWeek(date); const rows=QC_PLANNING.filter(function(p){ return Number(p.Annee)===wk.annee && Number(p.Semaine)===wk.semaine && String(p.Shift)===String(sh) && (!eq||p.Equipe===eq) && p.ChefEquipe; });
@@ -3302,18 +3304,30 @@ function qcChefLookup(){ const date=document.getElementById('qcDate').value, sh=
 function initQualite(){ const el=document.getElementById('qcDate'); if(el&&!el.value) el.value=S.today;
   document.getElementById('qcEq').innerHTML='<option value="">Toutes les équipes</option>'+EQUIPES.map(function(e){return '<option value="'+esc(e)+'">'+esc(eqLabel(e))+'</option>';}).join('');
   api('getPlanningAll',{}).then(function(r){ QC_PLANNING=r.rows||[]; qcChefLookup(); }).catch(function(){ QC_PLANNING=[]; });
+  api('getQcCtrl',{}).then(function(r){ QC_CTRL=r.data||{}; qcAutoCtrl(); }).catch(function(){ QC_CTRL={}; });
   const emps=(S.emp||[]).slice().sort(function(a,b){return String(a.Nom).localeCompare(String(b.Nom));});
   document.getElementById('qcCtrl').innerHTML='<option value="">— contrôleur —</option>'+emps.map(function(e){return '<option value="'+esc(e.Nom)+'">'+esc(e.Nom)+' ('+esc(e.ID)+')</option>';}).join('');
   if(!document.getElementById('qcLines').children.length) qcAddLine();
   qcProd(); loadQcList();
 }
 function qcProd(){ const date=document.getElementById('qcDate').value, sh=document.getElementById('qcShift').value, eq=document.getElementById('qcEq').value;
-  qcChefLookup(); const info=document.getElementById('qcProdInfo');
+  qcChefLookup(); qcAutoCtrl(); const info=document.getElementById('qcProdInfo');
   if(!date){ info.textContent='Produit du shift : — (choisis la date)'; QC_LOTS=[]; qcFillLots(); return; }
   api('getFiches',{du:date,au:date}).then(function(r){ const fs=(r.rows||[]).filter(function(f){ return isoD(f.Date)===date && String(f.Shift)===String(sh) && (!eq || f.Equipe===eq); });
     const prod=fs.reduce(function(s,f){return s+Number(f.TotalRealise||0);},0); QC_FICHES=fs; QC_LOTS=fs.map(function(f){return f.FicheID;});
-    info.innerHTML='Produit du shift '+esc(sh)+(eq?(' · '+esc(eqLabel(eq))):'')+' : <b>'+prod+'</b> palette(s) · lots : '+(QC_LOTS.length?QC_LOTS.map(esc).join(', '):'—'); info.dataset.prod=prod; qcFillLots(); qcTotals();
+    info.innerHTML='Produit du shift '+esc(sh)+(eq?(' · '+esc(eqLabel(eq))):'')+' : <b>'+prod+'</b> palette(s) · lots : '+(QC_LOTS.length?QC_LOTS.map(esc).join(', '):'—'); info.dataset.prod=prod;
+    // Lignes AUTO : un article produit = une ligne (le contrôleur met la Qté NOK)
+    const seen={}, produced=[]; fs.forEach(function(f){ (f.detail||[]).forEach(function(d){ const ref=d.Ref; const q=Number(d.QteRealise||0); if(!ref||q<=0)return; const k=f.FicheID+'|'+ref; if(seen[k])return; seen[k]=1; produced.push({lot:f.FicheID,ref:ref,prod:q}); }); });
+    qcBuildProducedLines(produced); qcFillLots(); qcTotals();
   }).catch(function(){ info.textContent='Produit du shift : —'; }); }
+function qcBuildProducedLines(produced){ const cont=document.getElementById('qcLines');
+  if(!produced.length){ if(!cont.children.length) qcAddLine(); return; }
+  cont.innerHTML=''; produced.forEach(function(p){ qcAddLine(); const row=cont.lastElementChild;
+    row.querySelector('.qcRef').value=p.ref; const sel=row.querySelector('.qcLot');
+    sel.innerHTML='<option value="">— lot —</option>'+QC_LOTS.map(function(l){return '<option'+(l===p.lot?' selected':'')+'>'+esc(l)+'</option>';}).join('')+'<option value="__">(autre)</option>'; sel.value=p.lot;
+    row.dataset.prod=p.prod; }); }
+function qcAutoCtrl(){ const sh=document.getElementById('qcShift').value; const sel=document.getElementById('qcCtrl'); if(!sel)return;
+  if(QC_CTRL && QC_CTRL[sh] && !sel.value){ sel.value=QC_CTRL[sh]; } }
 function qcFillLots(){ [].forEach.call(document.querySelectorAll('#qcLines .qcLot'),function(sel){ const cur=sel.value; sel.innerHTML='<option value="">— lot —</option>'+QC_LOTS.map(function(l){return '<option>'+esc(l)+'</option>';}).join('')+'<option value="__">(autre)</option>'; sel.value=cur; }); }
 function qcAddLine(){ const d=document.createElement('div'); d.className='qc-row grid g3'; d.style.cssText='gap:8px;margin-bottom:8px;border-bottom:1px dashed var(--line);padding-bottom:8px';
   d.innerHTML='<div class="field"><label>N° lot</label><select class="qcLot"></select></div>'
@@ -3332,7 +3346,9 @@ function qcGather(){ const lignes=[];
   const prod=Number(document.getElementById('qcProdInfo').dataset.prod||0); const nok=lignes.reduce(function(s,l){return s+l.qte;},0);
   return { Date:document.getElementById('qcDate').value, Equipe:document.getElementById('qcEq').value, Shift:document.getElementById('qcShift').value, Chef:(document.getElementById('qcChefInfo').dataset.chef||''), Controleur:document.getElementById('qcCtrl').value, Type:document.getElementById('qcType').value, Produit:prod, NOK:nok, lignes:lignes }; }
 function qcSave(){ const rec=qcGather(); if(!rec.Date){toast('Date requise','err');return;} if(!rec.Controleur){toast('Choisis le contrôleur','err');return;} if(!rec.lignes.length){toast('Ajoute au moins une ligne NOK (qté>0)','err');return;}
-  api('saveQualite',{password:ADMIN_PWD,rec:rec}).then(function(){ toast('Contrôle qualité enregistré ✔','ok'); document.getElementById('qcLines').innerHTML=''; qcAddLine(); qcTotals(); loadQcList(); }).catch(function(e){toast(e.message,'err');}); }
+  api('saveQualite',{password:ADMIN_PWD,rec:rec}).then(function(){ toast('Contrôle qualité enregistré ✔','ok');
+    if(rec.Shift && rec.Controleur){ QC_CTRL[rec.Shift]=rec.Controleur; api('saveQcCtrl',{password:ADMIN_PWD,data:QC_CTRL}).catch(function(){}); }
+    document.getElementById('qcLines').innerHTML=''; qcAddLine(); qcTotals(); loadQcList(); }).catch(function(e){toast(e.message,'err');}); }
 function loadQcList(){ api('getQualite',{}).then(function(r){ const rows=(r.rows||[]).sort(function(a,b){return (a.Date<b.Date?1:-1);}).slice(0,30);
   document.getElementById('qcList').innerHTML= rows.length? '<div class="tbl-wrap"><table><thead><tr><th>Date</th><th>Équipe</th><th>Type</th><th>Produit</th><th>NOK</th><th>NC%</th></tr></thead><tbody>'
     +rows.map(function(q){ const nc=q.Produit>0?Math.round(q.NOK/q.Produit*100):0; return '<tr><td>'+esc(isoD(q.Date))+'</td><td>'+esc(eqLabel(q.Equipe))+' · '+esc(shiftLabel(q.Shift))+'</td><td>'+esc(q.Type)+'</td><td>'+q.Produit+'</td><td>'+q.NOK+'</td><td'+(nc>5?' style="color:#b23b32;font-weight:700"':'')+'>'+nc+'%</td></tr>';}).join('')+'</tbody></table></div>' : '<div class="empty">Aucun contrôle.</div>';
