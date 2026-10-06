@@ -451,17 +451,22 @@ tr.alert td{background:var(--danger-soft)}
     <div class="vhead"><div class="eyebrow">Team Leader</div><h2>Contrôle qualité — palettes NOK</h2>
       <p>Saisis les palettes non conformes du shift. Le produit du shift et le taux sont calculés automatiquement.</p></div>
     <div class="card">
-      <div class="grid g3">
+      <div class="grid g2">
         <div class="field"><label>Date</label><input type="date" id="qcDate" onchange="qcProd()"></div>
         <div class="field"><label>Chef / Équipe / Shift</label><select id="qcChef" onchange="qcProd()"></select></div>
         <div class="field"><label>Type</label><select id="qcType"><option>NEUF</option><option>RECYCLER</option></select></div>
+        <div class="field"><label>Contrôleur qualité</label><select id="qcCtrl"></select></div>
       </div>
       <div class="info" id="qcProdInfo" style="margin:8px 0">Produit du shift : —</div>
       <h3 style="margin:10px 0 6px">Palettes NOK</h3>
       <div id="qcLines"></div>
       <button class="btn ghost sm" onclick="qcAddLine()" style="margin-top:6px">+ Ajouter une ligne NOK</button>
       <div class="info" id="qcTotals" style="margin-top:10px"></div>
-      <button class="btn" style="width:100%;margin-top:10px" onclick="qcSave()">Enregistrer le contrôle</button>
+      <div class="row-actions" style="margin-top:10px">
+        <button class="btn" onclick="qcSave()">Enregistrer le contrôle</button>
+        <button class="btn ghost sm" onclick="qcFichePdf()">Fiche de contrôle PDF</button>
+        <button class="btn ghost sm" onclick="qcEtiquettes()">Étiquettes NOK (à coller)</button>
+      </div>
     </div>
     <div class="card"><h3>Mes contrôles récents</h3><div id="qcList"></div></div>
   </section>
@@ -1361,7 +1366,7 @@ tr.alert td{background:var(--danger-soft)}
   </section>
 </main>
 
-<div class="foot">Valorise — outil interne · <b>version 9.2-SUPABASE · 03-01 · controle qualite</b> · <span id="userTag2"></span></div>
+<div class="foot">Valorise — outil interne · <b>version 9.3-SUPABASE · 03-01 · qualite fiche+etiquette</b> · <span id="userTag2"></span></div>
 </div><!-- /appWrap -->
 <div class="toast" id="toast"></div>
 
@@ -3241,6 +3246,8 @@ const QC_MOTIFS=['Clou saillant','Fissure / éclat','Dimension hors tolérance',
 let QC_FICHES=[], QC_LOTS=[];
 function initQualite(){ const el=document.getElementById('qcDate'); if(el&&!el.value) el.value=S.today;
   const list=chefsOfWeek(); document.getElementById('qcChef').innerHTML='<option value="">— chef —</option>'+list.map(function(c){return '<option value="'+esc(chefKey(c))+'">'+esc(c.chef)+' ('+esc(eqLabel(c.equipe))+' · '+esc(shiftLabel(c.shift))+')</option>';}).join('');
+  const emps=(S.emp||[]).slice().sort(function(a,b){return String(a.Nom).localeCompare(String(b.Nom));});
+  document.getElementById('qcCtrl').innerHTML='<option value="">— contrôleur —</option>'+emps.map(function(e){return '<option value="'+esc(e.Nom)+'">'+esc(e.Nom)+' ('+esc(e.ID)+')</option>';}).join('');
   if(!document.getElementById('qcLines').children.length) qcAddLine();
   qcProd(); loadQcList();
 }
@@ -3268,7 +3275,7 @@ function qcGather(){ const m=metaOfChef(document.getElementById('qcChef').value)
   [].forEach.call(document.querySelectorAll('#qcLines .qc-row'),function(r){ const lot=r.querySelector('.qcLot').value, ref=r.querySelector('.qcRef').value.trim(), qte=Number(r.querySelector('.qcQte').value||0), motif=r.querySelector('.qcMotif').value, stamp=r.querySelector('.qcStamp').value.trim();
     if(qte>0) lignes.push({lot:(lot==='__'?'':lot),ref:ref,qte:qte,motif:motif,stamp:stamp}); });
   const prod=Number(document.getElementById('qcProdInfo').dataset.prod||0); const nok=lignes.reduce(function(s,l){return s+l.qte;},0);
-  return { Date:document.getElementById('qcDate').value, Equipe:m?m.equipe:'', Shift:m?m.shift:'', Chef:m?m.chef:'', Type:document.getElementById('qcType').value, Produit:prod, NOK:nok, lignes:lignes }; }
+  return { Date:document.getElementById('qcDate').value, Equipe:m?m.equipe:'', Shift:m?m.shift:'', Chef:m?m.chef:'', Controleur:document.getElementById('qcCtrl').value, Type:document.getElementById('qcType').value, Produit:prod, NOK:nok, lignes:lignes }; }
 function qcSave(){ const rec=qcGather(); if(!rec.Date||!rec.Chef){toast('Date + chef requis','err');return;} if(!rec.lignes.length){toast('Ajoute au moins une ligne NOK (qté>0)','err');return;}
   api('saveQualite',{password:ADMIN_PWD,rec:rec}).then(function(){ toast('Contrôle qualité enregistré ✔','ok'); document.getElementById('qcLines').innerHTML=''; qcAddLine(); qcTotals(); loadQcList(); }).catch(function(e){toast(e.message,'err');}); }
 function loadQcList(){ api('getQualite',{}).then(function(r){ const rows=(r.rows||[]).sort(function(a,b){return (a.Date<b.Date?1:-1);}).slice(0,30);
@@ -3276,8 +3283,40 @@ function loadQcList(){ api('getQualite',{}).then(function(r){ const rows=(r.rows
     +rows.map(function(q){ const nc=q.Produit>0?Math.round(q.NOK/q.Produit*100):0; return '<tr><td>'+esc(isoD(q.Date))+'</td><td>'+esc(eqLabel(q.Equipe))+' · '+esc(shiftLabel(q.Shift))+'</td><td>'+esc(q.Type)+'</td><td>'+q.Produit+'</td><td>'+q.NOK+'</td><td'+(nc>5?' style="color:#b23b32;font-weight:700"':'')+'>'+nc+'%</td></tr>';}).join('')+'</tbody></table></div>' : '<div class="empty">Aucun contrôle.</div>';
 }).catch(function(){}); }
 
+function qcFichePdf(rec){ const r=(rec&&rec.lignes)?rec:qcGather(); const J=window.jspdf; if(!J||!J.jsPDF){toast('PDF indisponible','err');return;}
+  if(!r.lignes.length){toast('Aucune ligne NOK','err');return;}
+  const doc=new J.jsPDF({unit:'mm',format:'a4'}); doc.setFillColor(22,74,52);doc.rect(0,0,210,20,'F');doc.setTextColor(255);doc.setFont('helvetica','bold');doc.setFontSize(15);doc.text('VALORISE MAROC — FICHE DE CONTRÔLE QUALITÉ',14,13);
+  doc.setTextColor(20);doc.setFont('helvetica','normal');doc.setFontSize(10); let y=30;
+  doc.text('Date : '+isoD(r.Date)+'      Équipe : '+eqLabel(r.Equipe)+' · '+shiftLabel(r.Shift),14,y); y+=6;
+  doc.text('Type : '+r.Type+'      Chef : '+(r.Chef||'')+'      Contrôleur : '+(r.Controleur||'—'),14,y); y+=6;
+  const nc=r.Produit>0?(r.NOK/r.Produit*100):0, qual=r.Produit>0?((r.Produit-r.NOK)/r.Produit*100):0;
+  doc.text('Produit : '+r.Produit+'      NOK : '+r.NOK+'      Non-conformité : '+nc.toFixed(1)+'%      Qualité : '+qual.toFixed(1)+'%',14,y); y+=4;
+  doc.autoTable({startY:y+4,head:[['N° lot','Référence','Qté NOK','Motif','N° stampé']],body:r.lignes.map(function(l){return [l.lot||'—',l.ref||'—',l.qte,l.motif||'',l.stamp||'—'];}),styles:{fontSize:9},headStyles:{fillColor:[46,125,85]}});
+  let yy=doc.lastAutoTable.finalY+16; doc.text('Visa Contrôleur',16,yy); doc.rect(14,yy+3,60,20); doc.text('Visa Responsable',120,yy); doc.rect(118,yy+3,70,20);
+  doc.setFontSize(7);doc.setTextColor(140);doc.text('Valorise Maroc · MA-3403 HT · '+(r.QID||''),196,290,{align:'right'});
+  doc.save('Fiche_controle_'+isoD(r.Date)+'.pdf'); }
+function qcEtiquettes(rec){ const r=(rec&&rec.lignes)?rec:qcGather(); const J=window.jspdf; if(!J||!J.jsPDF){toast('PDF indisponible','err');return;}
+  if(!r.lignes.length){toast('Aucune ligne NOK','err');return;}
+  const doc=new J.jsPDF({unit:'mm',format:'a4'}); const W=210, M=10, lw=W-2*M, lh=128; let i=0;
+  r.lignes.forEach(function(l,idx){ const pos=idx%2; if(idx>0&&pos===0) doc.addPage(); const y=M+pos*(lh+8);
+    doc.setDrawColor(178,59,50); doc.setLineWidth(1.4); doc.roundedRect(M,y,lw,lh,4,4);
+    doc.setFillColor(178,59,50); doc.rect(M,y,lw,20,'F'); doc.setTextColor(255); doc.setFont('helvetica','bold'); doc.setFontSize(22); doc.text('⚠ PALETTE NON CONFORME',W/2,y+13,{align:'center'});
+    doc.setTextColor(20); doc.setFont('helvetica','normal'); doc.setFontSize(13); let yy=y+32;
+    const line=function(k,v,big){ doc.setFont('helvetica','bold'); doc.text(k,M+8,yy); doc.setFont('helvetica',big?'bold':'normal'); if(big)doc.setFontSize(20); doc.text(String(v||'—'),M+70,yy); if(big)doc.setFontSize(13); yy+=big?14:11; };
+    line('N° stampé palette :', l.stamp, true);
+    line('Référence :', l.ref);
+    line('N° lot :', l.lot);
+    line('Motif du défaut :', l.motif);
+    line('Quantité :', l.qte);
+    line('Date / Équipe :', isoD(r.Date)+'  ·  '+eqLabel(r.Equipe)+' · '+shiftLabel(r.Shift));
+    line('Contrôleur :', r.Controleur);
+    doc.setFontSize(8); doc.setTextColor(120); doc.text('VALORISE MAROC · Rebut / à retraiter · MA-3403 HT',W/2,y+lh-5,{align:'center'});
+  });
+  doc.save('Etiquettes_NOK_'+isoD(r.Date)+'.pdf'); }
+
 /* --- Admin : analyse qualité --- */
-let EQ_LAST={};
+let EQ_LAST={}, EQ_ROWS=[];
+function eqDelete(id){ if(!confirm('Supprimer ce contrôle ?'))return; api('deleteQualite',{password:ADMIN_PWD,id:id}).then(function(){ toast('Supprimé','ok'); loadEtatQual(); }).catch(function(e){toast(e.message,'err');}); }
 function initEtatQual(){ const d=new Date(); document.getElementById('eqDu').value=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-01'; document.getElementById('eqAu').value=d.toISOString().slice(0,10); loadEtatQual(); }
 function loadEtatQual(){ const du=document.getElementById('eqDu').value, au=document.getElementById('eqAu').value; document.getElementById('eqBody').innerHTML='<div class="loading"><span class="spin"></span> …</div>';
   api('getQualite',{}).then(function(r){ const rows=(r.rows||[]).filter(function(q){ const d=isoD(q.Date); return (!du||d>=du)&&(!au||d<=au); });
@@ -3299,6 +3338,11 @@ function loadEtatQual(){ const du=document.getElementById('eqDu').value, au=docu
     h+='</div>';
     const motifs=Object.keys(byMotif).map(function(m){return {m:m,q:byMotif[m]};}).sort(function(a,b){return b.q-a.q;});
     h+='<div class="card"><h3>Défauts par motif (Pareto)</h3><div class="tbl-wrap"><table><thead><tr><th>Motif</th><th>NOK</th><th>%</th></tr></thead><tbody>'+(motifs.length?motifs.map(function(x){return '<tr><td>'+esc(x.m)+'</td><td>'+x.q+'</td><td>'+(nok?Math.round(x.q/nok*100):0)+'%</td></tr>';}).join(''):'<tr><td colspan="3" class="empty">—</td></tr>')+'</tbody></table></div></div>';
+    const srt=rows.slice().sort(function(a,b){return (a.Date<b.Date?1:-1);});
+    EQ_ROWS=srt;
+    h+='<div class="card"><h3>Historique des contrôles</h3><div class="tbl-wrap"><table><thead><tr><th>Date</th><th>Équipe</th><th>Type</th><th>Contrôleur</th><th>Produit</th><th>NOK</th><th>NC%</th><th></th></tr></thead><tbody>'
+      +(srt.length?srt.map(function(q,k){ const ncq=q.Produit>0?Math.round(q.NOK/q.Produit*100):0; return '<tr><td>'+esc(isoD(q.Date))+'</td><td>'+esc(eqLabel(q.Equipe))+' · '+esc(shiftLabel(q.Shift))+'</td><td>'+esc(q.Type)+'</td><td>'+esc(q.Controleur||'—')+'</td><td>'+q.Produit+'</td><td>'+q.NOK+'</td><td'+(ncq>5?' style="color:#b23b32;font-weight:700"':'')+'>'+ncq+'%</td>'
+        +'<td style="white-space:nowrap"><button class="btn sm ghost" onclick="qcFichePdf(EQ_ROWS['+k+'])">Fiche</button> <button class="btn sm ghost" onclick="qcEtiquettes(EQ_ROWS['+k+'])">Étiquettes</button> <button class="btn link" onclick="eqDelete(\''+esc(q.QID)+'\')">✕</button></td></tr>'; }).join(''):'<tr><td colspan="8" class="empty">Aucun contrôle.</td></tr>')+'</tbody></table></div></div>';
     document.getElementById('eqBody').innerHTML=h;
   }).catch(function(e){ document.getElementById('eqBody').innerHTML='<div class="warnbox">'+esc(e.message)+'</div>'; }); }
 function eqExcel(){ if(!EQ_LAST.rows||!EQ_LAST.rows.length){toast('Rien à exporter','err');return;} const wb=XLSX.utils.book_new();
