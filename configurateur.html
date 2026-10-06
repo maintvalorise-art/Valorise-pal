@@ -563,9 +563,9 @@ const VM_CONFIG = {
     legal: 'RC 64711 · IF 15165339 · ICE 001531737000021',
     phones: '+212 6 66 28 52 39 · +212 6 63 45 27 05',
     mails: 'info@valorise.ma · bhar.ayman@valorise.ma',
-    footer: 'Palettes traitées NIMP 15 / ISPM 15 — producteur MA-3483 HT · Une société du groupe Fueltec Search'
+    footer: 'Palettes traitées NIMP 15 / ISPM 15 — producteur MA-3403 HT · Une société du groupe Fueltec Search'
   },
-  conditions: 'Prix hors taxes, en MAD.\nPalettes traitées thermiquement et marquées NIMP 15 (MA-3483 HT).\nDélai de livraison : à confirmer à la commande.\nConditions de paiement : à convenir.'
+  conditions: 'Prix hors taxes, en MAD.\nPalettes traitées thermiquement et marquées NIMP 15 (MA-3403 HT).\nDélai de livraison : à confirmer à la commande.\nConditions de paiement : à convenir.'
 };
 
 (function () {
@@ -851,7 +851,7 @@ const VM_CONFIG = {
     let yy = Math.max(doc.lastAutoTable.finalY, 90) + 8;
     doc.setFont(undefined, 'bold'); doc.text('Exigences techniques', 14, yy); yy += 6; doc.setFont(undefined, 'normal'); doc.setFontSize(9);
     ['Bois de pin de qualité, humidité conforme aux exigences IPPC.',
-     'Traitement thermique NIMP 15 / ISPM 15 et marquage (MA-3483 HT).',
+     'Traitement thermique NIMP 15 / ISPM 15 et marquage (MA-3403 HT).',
      'Assemblage cloué ; clous enfoncés et non saillants.',
      'Tolérance : longueur ± 3 mm, épaisseur + 1 mm.'].forEach(t => { doc.text('• ' + t, 16, yy); yy += 5; });
     doc.setFontSize(7); doc.setTextColor(140); doc.text('Valorise Maroc · Zone Franche Tanger · ' + new Date().toISOString().slice(0,10), 196, 290, { align: 'right' });

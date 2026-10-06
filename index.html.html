@@ -334,7 +334,7 @@ tr.alert td{background:var(--danger-soft)}
             <div class="pf"><div class="pf-ic">🔥</div><h3>ISPM 15</h3><p>Traitement thermique pour l'export.</p></div>
             <div class="pf"><div class="pf-ic">🚚</div><h3>Livraison</h3><p>Tanger Free Zone, Automotive City, Kenitra.</p></div>
           </div>
-          <div class="pres-foot">VALORISE MAROC · Zone Franche d'Exportation, Tanger · Producteur ISPM 15 n° MA-3483 · Groupe Fueltec Search</div>
+          <div class="pres-foot">VALORISE MAROC · Zone Franche d'Exportation, Tanger · Producteur ISPM 15 n° MA-3403 · Groupe Fueltec Search</div>
         </div>
       </div>
     </div>
@@ -924,7 +924,7 @@ tr.alert td{background:var(--danger-soft)}
       <div class="card">
         <h3>Autorisation ONSSA</h3>
         <div class="grid g3">
-          <div class="field"><label>N° autorisation</label><input id="etOnNum" placeholder="MA-3483 / …"></div>
+          <div class="field"><label>N° autorisation</label><input id="etOnNum" placeholder="MA-3403 / …"></div>
           <div class="field"><label>Date début</label><input type="date" id="etOnDeb" oninput="echPreview()"></div>
           <div class="field"><label>Date fin (expiration)</label><input type="date" id="etOnFin" oninput="echPreview()"></div>
         </div>
@@ -1325,7 +1325,7 @@ tr.alert td{background:var(--danger-soft)}
   </section>
 </main>
 
-<div class="foot">Valorise — outil interne · <b>version 9.0-SUPABASE · 03-01 · objectifs+echeances</b> · <span id="userTag2"></span></div>
+<div class="foot">Valorise — outil interne · <b>version 9.1-SUPABASE · 03-01 · fix MA-3403</b> · <span id="userTag2"></span></div>
 </div><!-- /appWrap -->
 <div class="toast" id="toast"></div>
 
@@ -4115,7 +4115,7 @@ function echAttestation(){ const J=window.jspdf; if(!J||!J.jsPDF){toast('PDF ind
   doc.text('Dernier étalonnage : '+(fLast||'—')+'    Périodicité : '+(fPer||'—')+' mois',16,y); y+=6;
   doc.text('Prochain étalonnage : '+(fNext||'—')+'    Organisme/N° : '+(fOrg||'—'),16,y); y+=6;
   const dF=echDaysLeft(fNext); doc.text('Statut : '+(dF==null?'—':(dF<0?('DÉPASSÉ depuis '+(-dF)+' j'):(dF+' j restants'))),16,y); y+=14;
-  doc.setFontSize(9);doc.text('Producteur ISPM 15 / NIMP 15 — Marquage MA-3483 HT.',14,y); y+=18;
+  doc.setFontSize(9);doc.text('Producteur ISPM 15 / NIMP 15 — Marquage MA-3403 HT.',14,y); y+=18;
   doc.text('Fait à Tanger, le '+new Date().toISOString().slice(0,10),14,y);
   doc.text('Signature & cachet :',130,y); doc.rect(130,y+3,60,22);
   doc.setFontSize(7);doc.setTextColor(140);doc.text('Valorise Maroc · Zone Franche Tanger · Groupe Fueltec',196,290,{align:'right'});
