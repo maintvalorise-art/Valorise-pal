@@ -830,6 +830,22 @@ tr.alert td{background:var(--danger-soft)}
     </div>
   </section>
 
+  <!-- ============ ÉTAT DE STOCK MENSUEL (admin) ============ -->
+  <section class="view" data-view="etatstock">
+    <div class="vhead"><div class="eyebrow">Gestion de Stock</div><h2>État de stock mensuel</h2>
+      <p>Stock initial → Production → Livré → Stock final, avec inventaire &amp; écart (par article).</p></div>
+    <div class="admin-body" data-admin="etatstock">
+      <div class="card">
+        <div class="grid g3" style="margin-bottom:10px">
+          <div class="field"><label>Mois</label><input type="month" id="esMonth" onchange="loadStockEtat()"></div>
+          <div class="field"><label>Type</label><select id="esType" onchange="esRender()"><option value="">Tous</option><option>NEUF</option><option>RECYCLER</option></select></div>
+          <div class="field" style="align-self:end"><button class="btn ghost" onclick="loadStockEtat()">Actualiser</button> <button class="btn ghost sm" onclick="esExcel()">Excel</button> <button class="btn ghost sm" onclick="esPdf()">PDF</button></div>
+        </div>
+      </div>
+      <div id="esBody"></div>
+    </div>
+  </section>
+
   <!-- ============ INVENTAIRE PHYSIQUE (admin) ============ -->
   <section class="view" data-view="inventaire">
     <div class="vhead"><div class="eyebrow">Gestion de Stock</div><h2>Inventaire physique</h2>
@@ -1217,7 +1233,7 @@ tr.alert td{background:var(--danger-soft)}
         <div class="grid g3" style="margin-bottom:6px">
           <div class="field"><label>Du</label><input type="date" id="dbDu"></div>
           <div class="field"><label>Au</label><input type="date" id="dbAu"></div>
-          <div class="field" style="align-self:end"><button class="btn ghost" onclick="loadDashboard()">Actualiser</button></div>
+          <div class="field" style="align-self:end"><button class="btn ghost" onclick="loadDashboard()">Actualiser</button> <button class="btn ghost sm" onclick="dbPdf()">PDF</button></div>
         </div>
       </div>
       <div id="dbKpis"></div>
@@ -1375,7 +1391,7 @@ tr.alert td{background:var(--danger-soft)}
   </section>
 </main>
 
-<div class="foot">Valorise — outil interne · <b>version 10.0-SUPABASE · 03-01 · qualite tableau realise+NOK</b> · <span id="userTag2"></span></div>
+<div class="foot">Valorise — outil interne · <b>version 10.1-SUPABASE · 03-01 · etat stock mensuel + dash pdf</b> · <span id="userTag2"></span></div>
 </div><!-- /appWrap -->
 <div class="toast" id="toast"></div>
 
@@ -1808,7 +1824,7 @@ const MODULES = {
   dash:  {label:'📊 Tableau de bord', tabs:[['dashboard','KPI']]},
   prod:  {label:'Gestion Prod',     tabs:[['contrat','Contrats'],['suivicmd','Suivi Cmd'],['configpal','Configurateur'],['ordre','Ordre de Prod'],['bom','BOM'],['devis','Devis'],['recapprod','Recap Prod'],['etatprod','État Prod'],['etatqual','Qualité'],['histo','Historique'],['kpi','KPI']]},
   rh:    {label:'Gestion RH',       tabs:[['employes','Employés'],['affect','Affectation'],['postes','Postes'],['matrice','Matrice'],['recap','Recap abs.'],['abshisto','Fiches absence'],['demrh','Demandes'],['notation','Notation'],['transport','Transport']]},
-  stock: {label:'Gestion de Stock', tabs:[['stock','Stock'],['entree','Entrée stock'],['sortie','Sortie stock'],['inventaire','Inventaire'],['livnew','Bon Livraison'],['livreg','Registre BL'],['etatbl','État BL'],['planliv','Planning Livraison'],['articles','Articles']]},
+  stock: {label:'Gestion de Stock', tabs:[['stock','Stock'],['entree','Entrée stock'],['sortie','Sortie stock'],['inventaire','Inventaire'],['etatstock','État stock mensuel'],['livnew','Bon Livraison'],['livreg','Registre BL'],['etatbl','État BL'],['planliv','Planning Livraison'],['articles','Articles']]},
   trt:   {label:'Traitement',        tabs:[['trait','Fiche traitement'],['etattrait','État Traitement'],['echeances','Échéances']]},
   config:{label:'Config',           tabs:[['objectifs','Objectifs'],['import','Import Excel'],['reglages','Réglages']]}
 };
@@ -1964,6 +1980,7 @@ function onEnter(v){
   if(v==='echeances') initEcheances();
   if(v==='etatbl') initEtatBl();
   if(v==='inventaire') initInventaire();
+  if(v==='etatstock') initStockEtat();
   if(v==='etattrait') initEtatTrait();
   if(v==='kpi') initKpi();
   if(v==='postes') renderPostesBase();
@@ -4106,6 +4123,60 @@ function ebPdf(){ if(!EB_LAST.cli.length){toast('Rien à exporter','err');return
       doc.text('Page '+doc.internal.getNumberOfPages(), W-14, h-8, {align:'right'}); } });
   doc.save('Etat_livraisons_'+(du||'').replace(/-/g,'')+'.pdf'); }
 
+/* ================= ÉTAT DE STOCK MENSUEL ================= */
+let ES_ROWS=[], ES_MONTH='';
+function esArtType(ref){ const a=S.art.find(function(x){return String(x.Ref)===String(ref);}); const s=((a&&a.Designation)||'')+' '+String(ref); if(/recycl/i.test(s)||/recycl/i.test((a&&a.Famille)||''))return'RECYCLER'; if(/neuf|new|^va88|^pal|^cover|^c\d|^p\d/i.test(s))return'NEUF'; return (a&&/recycl/i.test(a.TypePalette||''))?'RECYCLER':'NEUF'; }
+function esDes(ref){ const a=S.art.find(function(x){return String(x.Ref)===String(ref);}); return a?(a.Designation||''):''; }
+function initStockEtat(){ const d=new Date(); const el=document.getElementById('esMonth'); if(el&&!el.value) el.value=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); loadStockEtat(); }
+function loadStockEtat(){ const mv=document.getElementById('esMonth').value; if(!mv){ return; } ES_MONTH=mv;
+  const du=mv+'-01'; const dt=new Date(Number(mv.slice(0,4)), Number(mv.slice(5,7)), 0); const au=mv+'-'+String(dt.getDate()).padStart(2,'0');
+  document.getElementById('esBody').innerHTML='<div class="loading"><span class="spin"></span> …</div>';
+  const ARTKEY=buildArtKey();
+  Promise.all([api('getMouvements',{du:'2000-01-01',au:au}),api('getFiches',{du:du,au:au}),api('getLivraisons',{}),api('getInventaires',{})]).then(function(res){
+    const mov=res[0].rows||[], fiches=res[1].rows||[], livs=res[2].rows||[], invs=res[3].rows||[];
+    const init={}, prod={}, livree={}, inv={};
+    // Stock initial = mouvements avant le 1er du mois
+    mov.forEach(function(m){ const d=isoD(m.Date); if(d>=du) return; const ref=ARTKEY[norm(scRefCode(m.Ref))]||ARTKEY[norm(m.Ref)]||m.Ref; if(!ref)return; const q=Number(m.Qte||0); init[ref]=(init[ref]||0)+(/out|sortie/i.test(m.Sens)?-q:q); });
+    // Prod du mois = fiches detail
+    fiches.forEach(function(f){ (f.detail||[]).forEach(function(d){ const ref=ARTKEY[norm(scRefCode(d.Ref))]||d.Ref; const q=Number(d.QteRealise||0); if(ref&&q)prod[ref]=(prod[ref]||0)+q; }); });
+    // Livré du mois = BL
+    livs.forEach(function(b){ const dd=isoD(b.Date); if(dd<du||dd>au)return; (b.lignes||[]).forEach(function(l){ const code=scRefCode(l.ref||l.Ref||''); const ref=ARTKEY[norm(code)]||ARTKEY[norm(l.ref||'')]||code; const q=Number(l.qte||l.Qte||0); if(ref&&q)livree[ref]=(livree[ref]||0)+q; }); });
+    // Inventaire du mois (dernier)
+    const im=invs.filter(function(x){ const d=isoD(x.Date); return d>=du&&d<=au; }).sort(function(a,b){return a.Date<b.Date?1:-1;})[0];
+    if(im){ (im.lignes||[]).forEach(function(l){ const ref=ARTKEY[norm(scRefCode(l.ref))]||l.ref; inv[ref]=Number(l.reel); }); }
+    const refs={}; [init,prod,livree,inv].forEach(function(o){ Object.keys(o).forEach(function(r){refs[r]=1;}); }); S.art.filter(isPF).forEach(function(a){refs[a.Ref]=1;});
+    ES_ROWS=Object.keys(refs).map(function(ref){ const i=init[ref]||0, p=prod[ref]||0, lv=livree[ref]||0, sf=i+p-lv; const hasInv=inv[ref]!=null; const iv=hasInv?inv[ref]:null; const ec=hasInv?(iv-sf):null;
+      return {ref:ref, des:esDes(ref), type:esArtType(ref), init:i, prod:p, livree:lv, stock:sf, inv:iv, ecart:ec}; })
+      .filter(function(r){ return r.init||r.prod||r.livree||r.inv!=null; })
+      .sort(function(a,b){ return String(a.ref).localeCompare(String(b.ref)); });
+    esRender();
+  }).catch(function(e){ document.getElementById('esBody').innerHTML='<div class="warnbox">'+esc(e.message)+'</div>'; });
+}
+function esFiltered(){ const t=document.getElementById('esType').value; return ES_ROWS.filter(function(r){ return !t||r.type===t; }); }
+function esRender(){ const rows=esFiltered(); if(!rows.length){ document.getElementById('esBody').innerHTML='<div class="empty">Aucune donnée pour ce mois.</div>'; return; }
+  const nf=function(n){return String(Math.round(n||0)).replace(/\B(?=(\d{3})+(?!\d))/g,' ');};
+  let ti=0,tp=0,tl=0,ts=0; rows.forEach(function(r){ ti+=r.init;tp+=r.prod;tl+=r.livree;ts+=r.stock; });
+  let h='<div class="card"><div class="tbl-wrap"><table><thead><tr><th>Article</th><th>Désignation</th><th>Type</th><th>Stock initial</th><th>Prod</th><th>Livré</th><th>Stock final</th><th>Inventaire</th><th>Écart</th></tr></thead><tbody>'
+    +rows.map(function(r){ return '<tr><td><b>'+esc(r.ref)+'</b></td><td>'+esc(r.des)+'</td><td>'+esc(r.type)+'</td><td style="text-align:right">'+nf(r.init)+'</td><td style="text-align:right">'+nf(r.prod)+'</td><td style="text-align:right">'+nf(r.livree)+'</td><td style="text-align:right"><b>'+nf(r.stock)+'</b></td><td style="text-align:right">'+(r.inv!=null?nf(r.inv):'—')+'</td><td style="text-align:right'+(r.ecart?';color:#b23b32;font-weight:700':'')+'">'+(r.ecart!=null?((r.ecart>0?'+':'')+r.ecart):'—')+'</td></tr>'; }).join('')
+    +'<tr style="background:var(--green);color:#fff;font-weight:800"><td colspan="3">TOTAL</td><td style="text-align:right">'+nf(ti)+'</td><td style="text-align:right">'+nf(tp)+'</td><td style="text-align:right">'+nf(tl)+'</td><td style="text-align:right">'+nf(ts)+'</td><td></td><td></td></tr>'
+    +'</tbody></table></div></div>';
+  document.getElementById('esBody').innerHTML=h;
+}
+function esExcel(){ const rows=esFiltered(); if(!rows.length){toast('Rien à exporter','err');return;}
+  exportExcel(rows.map(function(r){return {Article:r.ref,Designation:r.des,Type:r.type,'Stock initial':r.init,Prod:r.prod,Livree:r.livree,'Stock final':r.stock,Inventaire:(r.inv!=null?r.inv:''),Ecart:(r.ecart!=null?r.ecart:'')};}),'EtatStock','Etat_stock_'+ES_MONTH+'.xlsx'); }
+function esPdf(){ const rows=esFiltered(); if(!rows.length){toast('Rien à exporter','err');return;} const J=window.jspdf; if(!J||!J.jsPDF){toast('PDF indisponible','err');return;}
+  const nf=function(n){return String(Math.round(n||0)).replace(/\B(?=(\d{3})+(?!\d))/g,' ');};
+  const doc=new J.jsPDF({unit:'mm',format:'a4',orientation:'landscape'}); doc.setFillColor(22,74,52);doc.rect(0,0,297,18,'F');doc.setTextColor(255);doc.setFont('helvetica','bold');doc.setFontSize(14);doc.text('VALORISE — État de stock mensuel',14,12);
+  doc.setTextColor(25);doc.setFont('helvetica','normal');doc.setFontSize(10);doc.text('Mois : '+ES_MONTH+(document.getElementById('esType').value?('   Type : '+document.getElementById('esType').value):''),14,26);
+  let ti=0,tp=0,tl=0,ts=0; rows.forEach(function(r){ti+=r.init;tp+=r.prod;tl+=r.livree;ts+=r.stock;});
+  doc.autoTable({startY:30,head:[['Article','Désignation','Type','Stock init.','Prod','Livré','Stock final','Invent.','Écart']],
+    body:rows.map(function(r){return [r.ref,r.des,r.type,nf(r.init),nf(r.prod),nf(r.livree),nf(r.stock),(r.inv!=null?nf(r.inv):'—'),(r.ecart!=null?((r.ecart>0?'+':'')+r.ecart):'—')];}),
+    foot:[['TOTAL','','',nf(ti),nf(tp),nf(tl),nf(ts),'','']],
+    styles:{fontSize:8},headStyles:{fillColor:[46,125,85]},footStyles:{fillColor:[22,74,52],textColor:255,fontStyle:'bold'},
+    columnStyles:{3:{halign:'right'},4:{halign:'right'},5:{halign:'right'},6:{halign:'right'},7:{halign:'right'},8:{halign:'right'}},
+    didParseCell:function(d){ if(d.section==='body'&&d.column.index===8){ const v=String(d.cell.raw); if(v!=='—'&&v!=='0')d.cell.styles.textColor=[178,59,50]; } }});
+  doc.save('Etat_stock_'+ES_MONTH+'.pdf'); }
+
 /* ================= INVENTAIRE PHYSIQUE ================= */
 let INV_ROWS=[];
 function initInventaire(){ const el=document.getElementById('invDate'); if(el&&!el.value) el.value=S.today;
@@ -4384,6 +4455,22 @@ function saveObjectifs(){ const data={ neufShift:Number(document.getElementById(
   api('saveObjectifs',{password:ADMIN_PWD,data:data}).then(function(){ OBJ=data; toast('Objectifs enregistrés ✔','ok'); }).catch(function(e){toast(e.message,'err');}); }
 
 /* ================= TABLEAU DE BORD KPI ================= */
+let DB_LAST={};
+function dbPdf(){ const J=window.jspdf; if(!J||!J.jsPDF){toast('PDF indisponible','err');return;} const d=DB_LAST; if(!d.du){toast('Actualise d\'abord','err');return;}
+  const nf=function(n){return String(Math.round(n||0)).replace(/\B(?=(\d{3})+(?!\d))/g,' ');}; const pc=function(v){return d.obj?Math.round(v/d.obj*100):0;};
+  const doc=new J.jsPDF({unit:'mm',format:'a4'}); const W=210; doc.setFillColor(13,44,31);doc.rect(0,0,W,24,'F');doc.setFillColor(201,138,58);doc.rect(0,24,W,1.2,'F');
+  doc.setTextColor(255);doc.setFont('helvetica','bold');doc.setFontSize(16);doc.text('VALORISE MAROC',14,11);doc.setFont('helvetica','normal');doc.setFontSize(11);doc.setTextColor(240,194,116);doc.text('Tableau de bord',14,19);
+  doc.setTextColor(255);doc.setFontSize(9);doc.text(d.du+' au '+d.au,W-14,19,{align:'right'});
+  const cards=[['Production',nf(d.real),'obj '+nf(d.obj)],['Réalisation',Math.round(d.perf)+'%',''],['Livré',nf(d.livTot),''],['Présence',d.presence+'%','cible '+d.presCible+'%'],['Qualité',(d.qualAuto!=null?d.qualAuto.toFixed(1)+'%':'—'),''],['Stock alertes',String(d.alertes),d.refs+' réfs']];
+  const n=cards.length, gap=4, x0=14, cw=(W-28-gap*(n-1))/n, cy=32, ch=20;
+  cards.forEach(function(c,k){ const x=x0+k*(cw+gap); doc.setFillColor(243,246,244);doc.roundedRect(x,cy,cw,ch,2,2,'F'); doc.setTextColor(110,125,114);doc.setFontSize(7);doc.text(c[0],x+cw/2,cy+6,{align:'center'}); doc.setTextColor(22,74,52);doc.setFont('helvetica','bold');doc.setFontSize(12);doc.text(String(c[1]),x+cw/2,cy+14,{align:'center'});doc.setFont('helvetica','normal'); });
+  doc.setTextColor(22,74,52);doc.setFont('helvetica','bold');doc.setFontSize(11);doc.text('Production par type',14,cy+ch+10);
+  doc.autoTable({startY:cy+ch+12,head:[['Type','Réalisé','Objectif','Taux']],body:[['NEUF',nf(d.byType.NEUF),nf(d.objByType.NEUF),(d.objByType.NEUF?Math.round(d.byType.NEUF/d.objByType.NEUF*100):0)+'%'],['RECYCLER',nf(d.byType.RECYCLER),nf(d.objByType.RECYCLER),(d.objByType.RECYCLER?Math.round(d.byType.RECYCLER/d.objByType.RECYCLER*100):0)+'%']],styles:{fontSize:9},headStyles:{fillColor:[46,125,85]}});
+  const dv=Number((document.getElementById('oeeDispo')||{}).value||0),pf=Number((document.getElementById('oeePerf')||{}).value||0),ql=Number((document.getElementById('oeeQual')||{}).value||0); const oee=dv*pf*ql/1e4;
+  doc.setFont('helvetica','bold');doc.setFontSize(11);doc.text('OEE / TRS',14,doc.lastAutoTable.finalY+10);doc.setFont('helvetica','normal');doc.setFontSize(10);
+  doc.text('Disponibilité '+dv+'% × Performance '+pf+'% × Qualité '+ql+'%  =  OEE '+oee.toFixed(1)+'%',14,doc.lastAutoTable.finalY+17);
+  doc.setFontSize(7);doc.setTextColor(140);doc.text('Valorise Maroc · Zone Franche Tanger · '+new Date().toISOString().slice(0,10),W-14,290,{align:'right'});
+  doc.save('Tableau_de_bord_'+(d.du||'')+'.pdf'); }
 function initDashboard(){ const d=new Date(); document.getElementById('dbDu').value=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-01'; document.getElementById('dbAu').value=d.toISOString().slice(0,10); oeeCalc(); oeeDetail(); loadDashboard(); }
 function dbCard(label,val,sub,color){ return '<div class="kpi" style="background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;text-align:center">'
   +'<div style="font-size:24px;font-weight:800;color:'+(color||'var(--green)')+'">'+val+'</div><div class="muted" style="font-size:12px">'+label+'</div>'+(sub?'<div class="muted" style="font-size:11px">'+sub+'</div>':'')+'</div>'; }
@@ -4429,6 +4516,7 @@ function loadDashboard(){ const du=document.getElementById('dbDu').value, au=doc
     if(qualAuto!=null) document.getElementById('oeeQual').value=Math.round(qualAuto*10)/10; else if(OBJ.qualite) document.getElementById('oeeQual').value=OBJ.qualite;
     if(OBJ.cadence) document.getElementById('oCad').value=OBJ.cadence;
     oeeCalc();
+    DB_LAST={du:du,au:au,real:real,obj:obj,perf:perf,livTot:livTot,presence:presence,presCible:presCible,alertes:alertes,refs:refs,fiches:fiches.length,qProd:qProd,qNok:qNok,qualAuto:qualAuto,byType:byType,objByType:objByType,top:[]};
     // par type : Réalisé vs Objectif vs Taux
     document.getElementById('dbType').innerHTML='<div class="tbl-wrap"><table><thead><tr><th>Type</th><th>Réalisé</th><th>Objectif</th><th>Taux</th></tr></thead><tbody>'
       +[['NEUF',byType.NEUF,objByType.NEUF],['RECYCLER',byType.RECYCLER,objByType.RECYCLER]].map(function(r){ const tx=r[2]>0?Math.round(r[1]/r[2]*100):0; return '<tr><td><b>'+r[0]+'</b></td><td>'+nf(r[1])+'</td><td>'+nf(r[2])+'</td><td'+(r[2]>0&&tx<90?' style="color:#b23b32;font-weight:700"':'')+'>'+(r[2]>0?tx+'%':'—')+'</td></tr>';}).join('')
