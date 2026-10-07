@@ -1391,7 +1391,7 @@ tr.alert td{background:var(--danger-soft)}
   </section>
 </main>
 
-<div class="foot">Valorise — outil interne · <b>version 10.1-SUPABASE · 03-01 · etat stock mensuel + dash pdf</b> · <span id="userTag2"></span></div>
+<div class="foot">Valorise — outil interne · <b>version 10.2-SUPABASE · 03-01 · fiche ref tacon+designation+pdf conso</b> · <span id="userTag2"></span></div>
 </div><!-- /appWrap -->
 <div class="toast" id="toast"></div>
 
@@ -2109,12 +2109,14 @@ function fillOpSelects(){
   const opts='<option value="">—</option>'+team.map(function(e){ return '<option value="'+esc(e.Nom)+'">'+esc(e.Nom)+' ('+esc(e.ID)+')</option>'; }).join('');
   document.querySelectorAll('#fPostes .poOp1, #fPostes .poOp2').forEach(function(sel){ const v=sel.value; sel.innerHTML=opts; sel.value=v; });
 }
+function poDesUpd(input){ const c=input.closest('.poste'); if(!c)return; const des=c.querySelector('.poDes'); if(!des)return; const a=S.art.find(function(x){return String(x.Ref)===input.value.trim();}); des.value=a?(a.Designation||''):''; }
 function renderPostes(){
   document.getElementById('fPostes').innerHTML=POSTES.map(function(po){
     const badge=po.kind==='PALLET'?'<span class="pill neuf">PALLET</span>':(po.kind==='COUVERCLE'?'<span class="pill rec">COUVERCLE</span>':'<span class="pill g">tâcon</span>');
     let g='';
-    if(po.prod) g+='<div class="field"><label>Référence</label><input class="poRef" list="pfList" placeholder="produit fini"></div>';
-    g+='<div class="field"><label>Réalisé</label><input type="number" class="poQte" min="0"></div>';
+    g+='<div class="field"><label>Référence'+(po.prod?'':' (palette concernée)')+'</label><input class="poRef" list="pfList" placeholder="'+(po.prod?'produit fini':'optionnel')+'" oninput="poDesUpd(this)"></div>';
+    g+='<div class="field"><label>Désignation</label><input class="poDes" readonly placeholder="—" style="background:var(--green-soft)"></div>';
+    g+='<div class="field"><label>Réalisé'+(po.prod?'':' (non compté)')+'</label><input type="number" class="poQte" min="0"></div>';
     g+='<div class="field"><label>Objectif</label><input type="number" class="poObj" min="0"></div>';
     g+='<div class="field"><label>Opérateur 1</label><select class="poOp1"></select></div>';
     if(po.ops===2) g+='<div class="field"><label>Opérateur 2</label><select class="poOp2"></select></div>';
@@ -2166,14 +2168,14 @@ async function doSaveFiche(){
   const hasProd=f.postes.some(function(p){return p.prod&&p.ref&&Number(p.qte)>0;});
   if(!hasProd){ toast('Saisis au moins un poste produit (réf + qté)','err'); return null; }
   const _codes={}; S.art.forEach(function(a){ _codes[norm(a.Ref)]=1; });
-  const _bad=f.postes.filter(function(p){ return p.prod&&p.ref&&!_codes[norm(p.ref)]; });
+  const _bad=f.postes.filter(function(p){ return p.ref&&!_codes[norm(p.ref)]; });
   if(_bad.length){ toast('Réf inconnue dans les Articles : '+_bad.map(function(p){return p.ref;}).join(', ')+' — choisis dans la liste','err'); return null; }
   try{ const d=await api('saveFiche',Object.assign({ficheId:CURFICHE},f));
     f.ficheId=d.ficheId; f.total=d.total; LAST_FICHE=f; FICHE_SAVED_ID=d.ficheId; return f;
   }catch(err){ toast(err.message,'err'); return null; }
 }
 function resetFicheInputs(){ [].forEach.call(document.querySelectorAll('#fPostes .poste'),function(c){
-    ['.poRef','.poQte','.poObj','.poOp1','.poOp2'].forEach(function(sel){ const el=c.querySelector(sel); if(el)el.value=''; }); });
+    ['.poRef','.poDes','.poQte','.poObj','.poOp1','.poOp2'].forEach(function(sel){ const el=c.querySelector(sel); if(el)el.value=''; }); });
   const cs=document.getElementById('fConso'); if(cs) cs.innerHTML='';
   ['fMMP','fReg','fMnt','fAut','fDsc','fCom'].forEach(function(id){ const el=document.getElementById(id); if(el)el.value=''; });
   newFicheId(); }
@@ -2199,9 +2201,10 @@ function fichePdf(f){
     body:f.postes.map(function(p){ return [p.poste,p.ref||'-',p.designation||'-',p.objectif||'-',p.qte||'-',
       (Number(p.objectif)>0?Math.round(Number(p.qte||0)/Number(p.objectif)*100)+'%':'-'),p.op1||'-',p.op2||'-']; }),
     styles:{fontSize:8,cellPadding:1.5}, headStyles:{fillColor:[46,125,85],fontSize:8}, columnStyles:{2:{cellWidth:32}} });
-  let y2=doc.lastAutoTable.finalY+5;
-  if(f.consommation.length){ doc.autoTable({ startY:y2, head:[['Bois / clous consommés','Qté']],
-    body:f.consommation.map(function(c){return [c.ref,c.qte];}), styles:{fontSize:8,cellPadding:1.5}, headStyles:{fillColor:[201,138,58]} });
+  let y2=doc.lastAutoTable.finalY+6;
+  if(f.consommation.length){ doc.setFont(undefined,'bold'); doc.setFontSize(9); doc.text('Consommation matières (bois, clous, lattes, arêtes…)',14,y2); doc.setFont(undefined,'normal'); y2+=2;
+    doc.autoTable({ startY:y2, head:[['Matière','Désignation','Qté consommée']],
+    body:f.consommation.map(function(c){ const a=S.art.find(function(x){return String(x.Ref)===String(c.ref);}); return [c.ref, (a?(a.Designation||''):''), c.qte]; }), styles:{fontSize:8,cellPadding:1.5}, headStyles:{fillColor:[201,138,58]}, columnStyles:{1:{cellWidth:60}} });
     y2=doc.lastAutoTable.finalY+5; }
   doc.setFontSize(9);
   doc.text('Total produit : '+f.total,14,y2); y2+=5;
@@ -4604,7 +4607,7 @@ function hEdit(i){ const f=H_ROWS[i]; if(!f)return;
     renderPostes();
     const byP={}; (f.detail||[]).forEach(function(d){ byP[d.Poste]=d; });
     [].forEach.call(document.querySelectorAll('#fPostes .poste'),function(c){ const d=byP[c.dataset.poste]; if(!d)return;
-      const rf=c.querySelector('.poRef'); if(rf)rf.value=d.Ref||'';
+      const rf=c.querySelector('.poRef'); if(rf){rf.value=d.Ref||''; poDesUpd(rf);}
       c.querySelector('.poQte').value=d.QteRealise||''; c.querySelector('.poObj').value=d.Objectif||'';
       [['poOp1',d.Operateur1],['poOp2',d.Operateur2]].forEach(function(pr){ const s=c.querySelector('.'+pr[0]); if(s&&pr[1]){ if(![].some.call(s.options,function(o){return o.value===pr[1];})){const op=document.createElement('option');op.textContent=pr[1];s.appendChild(op);} s.value=pr[1]; } });
     });
