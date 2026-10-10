@@ -1158,6 +1158,7 @@ tr.alert td{background:var(--danger-soft)}
         <div id="bomLines"></div>
         <button class="addline" onclick="addBomLine()">+ Ajouter un composant</button>
         <button class="btn" style="width:100%;margin-top:12px" onclick="saveBom()">Enregistrer le BOM</button>
+        <button class="btn ghost" style="width:100%;margin-top:8px" onclick="dikaSeed()">⚙ Importer le BOM DIKA (palettes 19/16/17/18 × 3 bois)</button>
       </div>
       <div class="card"><h3>BOM enregistrés</h3><div id="bomTable"></div></div>
       <div class="warnbox">Le prix d'un composant vient du prix d'achat moyen (entrées stock). Tu peux le forcer dans la colonne Prix.</div>
@@ -1446,7 +1447,7 @@ tr.alert td{background:var(--danger-soft)}
   </section>
 </main>
 
-<div class="foot">Valorise — outil interne · <b>version 10.3-SUPABASE · 03-01 · module Achats (demande + suivi statut + PDF Valorise 2)</b> · <span id="userTag2"></span></div>
+<div class="foot">Valorise — outil interne · <b>version 10.4-SUPABASE · 03-01 · BOM DIKA (24 PF ×3 bois + composants m³/clous)</b> · <span id="userTag2"></span></div>
 </div><!-- /appWrap -->
 <div class="toast" id="toast"></div>
 
@@ -3944,6 +3945,61 @@ function renderBomTable(){
       +'<td style="white-space:nowrap"><button class="btn sm ghost" onclick="editBom(\''+esc(b.ProduitRef)+'\')">✎</button> <button class="btn link" onclick="delBom(\''+esc(b.ProduitRef)+'\')">Suppr.</button></td></tr>'; }).join('')+'</tbody></table></div>'
     : '<div class="empty">Aucun BOM. Choisis un produit et ajoute ses composants.</div>';
 }
+/* --- BOM DIKA (import palettes 19/16/17/18 × 3 variantes bois) --- */
+/* a=variante 100% 100mm (m³), b=variante 100% 75mm (m³), m100/m75 = répartition bois en MIX 75/100.
+   c64/c50 fixes à 45/18 ; c45 = clous 45mm palette ; c30 = clous 30mm couvercle ; 9 dés/palette. */
+const DIKA_T=[
+ {k:'19',des:'19/20',mes:'1170*1150',c45:36,c30:90,pal:{a:0.0252,b:0.0202,m100:0.0054,m75:0.0162},cov:{a:0.0198,b:0.0162,m100:0.0054,m75:0.0121}},
+ {k:'16',des:'16',   mes:'1365*915', c45:24,c30:72,pal:{a:0.0216,b:0.0178,m100:0.0045,m75:0.0144},cov:{a:0.0192,b:0.0144,m100:0.0045,m75:0.011}},
+ {k:'17',des:'17',   mes:'1325*990', c45:36,c30:90,pal:{a:0.0255,b:0.0223,m100:0.0045,m75:0.0189},cov:{a:0.0192,b:0.0175,m100:0.0045,m75:0.0142}},
+ {k:'18',des:'18',   mes:'1320*1115',c45:36,c30:90,pal:{a:0.0285,b:0.0229,m100:0.0054,m75:0.0189},cov:{a:0.0222,b:0.0182,m100:0.0054,m75:0.0142}}
+];
+const DIKA_COMP=[
+ {Ref:'BOIS-100',Designation:'Bois 100mm (planches)',Famille:'Matière première',Unite:'m³'},
+ {Ref:'BOIS-75', Designation:'Bois 75mm (planches)', Famille:'Matière première',Unite:'m³'},
+ {Ref:'DE-BLOC', Designation:'Dé / Bloc 90×80×75mm', Famille:'Matière première',Unite:'U'},
+ {Ref:'CLOU-64', Designation:'Clou 64mm',             Famille:'Consommable',Unite:'U'},
+ {Ref:'CLOU-50', Designation:'Clou 50mm',             Famille:'Consommable',Unite:'U'},
+ {Ref:'CLOU-45', Designation:'Clou 45mm',             Famille:'Consommable',Unite:'U'},
+ {Ref:'CLOU-30', Designation:'Clou 30mm (couvercle)', Famille:'Consommable',Unite:'U'}
+];
+const DIKA_VAR=[['100','bois 100mm'],['MIX','MIX 75/100'],['75','bois 75mm']];
+function dikaBois(code,m){ // retourne les lignes bois selon la variante
+  if(code==='100') return [{ref:'BOIS-100',qte:m.a,prix:0}];
+  if(code==='75')  return [{ref:'BOIS-75', qte:m.b,prix:0}];
+  return [{ref:'BOIS-100',qte:m.m100,prix:0},{ref:'BOIS-75',qte:m.m75,prix:0}];
+}
+function dikaBuild(){
+  const arts=DIKA_COMP.map(function(c){ return Object.assign({TypePalette:'',Mesure:'',StockMin:0},c); });
+  const boms=[];
+  DIKA_T.forEach(function(t){ DIKA_VAR.forEach(function(v){ const code=v[0],lbl=v[1];
+    // PALETTE
+    const pref='PAL'+t.k+'-'+code, pdes='Palette '+t.des+' '+t.mes+' — '+lbl;
+    arts.push({Ref:pref,Designation:pdes,Famille:'Produit fini',Unite:'U',TypePalette:'NEUF',Mesure:t.mes,StockMin:0});
+    const pl=dikaBois(code,t.pal);
+    pl.push({ref:'DE-BLOC',qte:9,prix:0},{ref:'CLOU-64',qte:45,prix:0},{ref:'CLOU-50',qte:18,prix:0},{ref:'CLOU-45',qte:t.c45,prix:0});
+    boms.push({ProduitRef:pref,Designation:pdes,lignes:pl});
+    // COUVERCLE
+    const cref='COV'+t.k+'-'+code, cdes='Couvercle '+t.des+' '+t.mes+' — '+lbl;
+    arts.push({Ref:cref,Designation:cdes,Famille:'Produit fini',Unite:'U',TypePalette:'NEUF',Mesure:t.mes,StockMin:0});
+    const cl=dikaBois(code,t.cov);
+    cl.push({ref:'CLOU-30',qte:t.c30,prix:0});
+    boms.push({ProduitRef:cref,Designation:cdes,lignes:cl});
+  }); });
+  return {arts:arts,boms:boms};
+}
+async function dikaSeed(){
+  if(!confirm('Importer le BOM DIKA ?\n\n7 composants (bois 100/75, dés, clous 64/50/45/30) + 24 produits finis (palettes & couvercles 19/16/17/18 × 3 variantes bois) et leurs BOM.\n\nLes articles/BOM existants de même réf seront mis à jour.')) return;
+  const d=dikaBuild();
+  try{
+    await api('saveArticlesBulk',{password:ADMIN_PWD,rows:d.arts});
+    for(var i=0;i<d.boms.length;i++){ await api('saveBom',{password:ADMIN_PWD,bom:d.boms[i]}); }
+    try{ const b=await api('bootstrap',{date:todayStr()}); if(b&&b.articles) S.art=b.articles; }catch(e){}
+    await loadBomData(); fillBomProd(); renderBomTable();
+    toast('BOM DIKA importé : '+d.arts.length+' articles · '+d.boms.length+' BOM ✔','ok');
+  }catch(e){ toast(e.message||'Erreur import','err'); }
+}
+
 /* --- DEVIS --- */
 function initDevis(){ document.getElementById('dvDate').value=todayStr();
   const pr=loadBomData(); pr.then(function(){ if(!document.getElementById('dvLines').children.length) addDvLine(); dvCalc(); });
