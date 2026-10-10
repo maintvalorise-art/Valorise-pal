@@ -188,7 +188,7 @@ tr.alert td{background:var(--danger-soft)}
 .comtab thead th{vertical-align:bottom}
 .linerow{display:grid;grid-template-columns:1fr 110px 40px;gap:8px;align-items:end;margin-bottom:8px}
 .linerow.wide{grid-template-columns:1fr 100px 90px 1fr 40px}
-.linerow.bom8{grid-template-columns:1.3fr 66px 60px 60px 52px 74px 60px 30px}
+.linerow.bom8{grid-template-columns:1.2fr 84px 58px 56px 56px 58px 70px 28px}
 .xbtn{background:var(--danger-soft);color:var(--danger);border:none;border-radius:8px;height:40px;font-size:18px;cursor:pointer}
 .addline{background:none;border:1px dashed var(--green2);color:var(--green2);padding:8px;border-radius:8px;width:100%;font-weight:600;cursor:pointer;font-size:13.5px}
 .addline:hover{background:var(--green-soft)}
@@ -1463,7 +1463,7 @@ tr.alert td{background:var(--danger-soft)}
   </section>
 </main>
 
-<div class="foot">Valorise — outil interne · <b>version 10.7-SUPABASE · 03-01 · BOM dims→m³ auto + Besoin matière (qté de commande)</b> · <span id="userTag2"></span></div>
+<div class="foot">Valorise — outil interne · <b>version 10.8-SUPABASE · 03-01 · BOM mode Bois(m³)/Unité par ligne + clous en qté</b> · <span id="userTag2"></span></div>
 </div><!-- /appWrap -->
 <div class="toast" id="toast"></div>
 
@@ -3947,8 +3947,9 @@ function besoinCalc(){
   if(!lines.length){ document.getElementById('besoinBody').innerHTML='<div class="empty">Choisis au moins un produit fini et sa quantité.</div>'; BESOIN_LAST=[]; return; }
   const agg={};
   lines.forEach(function(ln){ const b=bomOf(ln.ref); if(!b)return; (b.lignes||[]).forEach(function(c){ const k=c.ref; if(!agg[k])agg[k]={ref:k,des:artName(k)||k,pieces:0,m3:0,cout:0};
-    const pieces=Number(c.qte||0)*ln.qte; const m3=Number(c.m3||0)*ln.qte; const p=Number(c.prix||PRIX[k]||0);
-    agg[k].pieces+=pieces; agg[k].m3+=m3; agg[k].cout+=pieces*p; }); });
+    const pieces=Number(c.qte||0)*ln.qte; const m3=Number(c.m3||0)*ln.qte; const p=Number(PRIX[k]||0);
+    const base=(c.mode==='bois'&&Number(c.m3)>0)?m3:pieces;
+    agg[k].pieces+=pieces; agg[k].m3+=m3; agg[k].cout+=base*p; }); });
   const rows=Object.keys(agg).map(function(k){return agg[k];}).sort(function(a,b){return a.des.localeCompare(b.des);});
   BESOIN_LAST=rows;
   const missing=lines.filter(function(ln){return !bomOf(ln.ref);});
@@ -3973,30 +3974,39 @@ function fillBomProd(){ document.getElementById('bomProd').innerHTML='<option va
 function bomCompoOptions(cur){ return '<option value="">— composant —</option>'+compoRefs().map(function(a){return '<option value="'+esc(a.Ref)+'" '+(String(a.Ref)===String(cur)?'selected':'')+'>'+esc(a.Ref)+' — '+esc(a.Designation)+'</option>';}).join(''); }
 function addBomLine(l){ l=l||{};
   const v=function(x){return (x!=null&&x!=='')?x:'';};
+  const mode=l.mode||((l.larg||l.ep)?'bois':'unite');
   const div=document.createElement('div'); div.className='linerow bom8';
   div.innerHTML='<div><select class="bmRef" onchange="bomCalc()">'+bomCompoOptions(l.ref)+'</select></div>'
+    +'<div><select class="bmMode" onchange="bomModeUpd(this)"><option value="bois"'+(mode==='bois'?' selected':'')+'>Bois m³</option><option value="unite"'+(mode==='unite'?' selected':'')+'>Unité</option></select></div>'
     +'<div><input type="number" class="bmL" placeholder="Long mm" value="'+v(l.lng)+'" oninput="bomCalc()"></div>'
     +'<div><input type="number" class="bmW" placeholder="Larg mm" value="'+v(l.larg)+'" oninput="bomCalc()"></div>'
     +'<div><input type="number" class="bmE" placeholder="Épais mm" value="'+v(l.ep)+'" oninput="bomCalc()"></div>'
-    +'<div><input type="number" class="bmQte" placeholder="Nb" min="0" value="'+v(l.qte)+'" oninput="bomCalc()"></div>'
-    +'<div><input class="bmM3" placeholder="m³" readonly value="'+v(l.m3)+'" style="background:var(--green-soft,#eef5ef)"></div>'
-    +'<div><input type="number" class="bmPrix" placeholder="Prix" value="'+(l.prix?l.prix:'')+'" oninput="bomCalc()"></div>'
+    +'<div><input type="number" class="bmQte" placeholder="Qté" min="0" value="'+v(l.qte)+'" oninput="bomCalc()"></div>'
+    +'<div><input class="bmM3" placeholder="m³ auto" readonly value="'+v(l.m3)+'" style="background:var(--green-soft,#eef5ef)"></div>'
     +'<button class="xbtn" onclick="this.parentNode.remove();bomCalc();">×</button>';
   document.getElementById('bomLines').appendChild(div);
+  bomModeUpd(div.querySelector('.bmMode'));
 }
-function bomLineM3(r){ const L=Number(r.querySelector('.bmL').value||0), W=Number(r.querySelector('.bmW').value||0),
+function bomModeUpd(sel){ if(!sel)return; const r=sel.closest('.linerow'); const unit=(sel.value==='unite');
+  ['.bmL','.bmW','.bmE'].forEach(function(c){ const el=r.querySelector(c); if(el){ el.disabled=unit; el.style.opacity=unit?0.4:1; el.placeholder=unit?'—':c.replace('.bm','').replace('L','Long mm').replace('W','Larg mm').replace('E','Épais mm'); } });
+  const q=r.querySelector('.bmQte'); if(q) q.placeholder=unit?'Qté (pièces)':'Nb planches';
+  bomCalc(); }
+function bomLineM3(r){ const sel=r.querySelector('.bmMode'); if(sel&&sel.value==='unite') return 0;
+  const L=Number(r.querySelector('.bmL').value||0), W=Number(r.querySelector('.bmW').value||0),
   E=Number(r.querySelector('.bmE').value||0), N=Number(r.querySelector('.bmQte').value||0);
   return (L>0&&W>0&&E>0)? (L*W*E*N)/1e9 : 0; }
 function bomLoad(){ const ref=document.getElementById('bomProd').value; document.getElementById('bomLines').innerHTML='';
   const b=bomOf(ref); if(b&&(b.lignes||[]).length){ b.lignes.forEach(function(l){addBomLine(l);}); } else { addBomLine(); } bomCalc(); }
 function bomGather(){ return [].map.call(document.querySelectorAll('#bomLines .linerow'),function(r){ const ref=r.querySelector('.bmRef').value;
+  const sel=r.querySelector('.bmMode'); const mode=sel?sel.value:'bois';
   const L=r.querySelector('.bmL'), W=r.querySelector('.bmW'), E=r.querySelector('.bmE');
   const num=function(el){ return (el&&el.value!=='')?Number(el.value):''; };
-  return {ref:ref, qte:Number(r.querySelector('.bmQte').value||0), prix:Number(r.querySelector('.bmPrix').value||0),
-    lng:num(L), larg:num(W), ep:num(E), m3:Number(bomLineM3(r).toFixed(5))}; }).filter(function(l){return l.ref&&l.qte>0;}); }
+  return {ref:ref, mode:mode, qte:Number(r.querySelector('.bmQte').value||0),
+    lng:(mode==='bois'?num(L):''), larg:(mode==='bois'?num(W):''), ep:(mode==='bois'?num(E):''),
+    m3:Number(bomLineM3(r).toFixed(5))}; }).filter(function(l){return l.ref&&l.qte>0;}); }
 function bomCalc(){ // m³ live par ligne + coût total
   [].forEach.call(document.querySelectorAll('#bomLines .linerow'),function(r){ const m=bomLineM3(r); const c=r.querySelector('.bmM3'); if(c)c.value=m?m.toFixed(5):''; });
-  const cost=bomGather().reduce(function(s,l){ const p=l.prix||Number(PRIX[l.ref]||0); return s+l.qte*p; },0);
+  const cost=bomGather().reduce(function(s,l){ const p=Number(PRIX[l.ref]||0); const base=(l.mode==='bois'&&l.m3>0)?l.m3:l.qte; return s+base*p; },0);
   document.getElementById('bomCost').textContent=cost.toFixed(2); }
 function saveBom(){ const ref=document.getElementById('bomProd').value; if(!ref){toast('Choisis un produit fini','err');return;}
   const bom={ProduitRef:ref,Designation:artName(ref),lignes:bomGather()};
@@ -4055,7 +4065,7 @@ function dikaSeed(){ // ouvre le panneau d'association
 function dikaRef(key){ const el=document.getElementById('dk_'+key); return el?el.value:''; }
 function dikaGroups(groups){ const b100=dikaRef('b100'),b75=dikaRef('b75'),out=[];
   (groups||[]).forEach(function(g){ const qty=g[0],lng=g[1],w=g[2]; const ref=(w===100?b100:b75);
-    if(ref)out.push({ref:ref,qte:qty,prix:0,lng:lng,larg:w,ep:15,m3:Number((lng*w*15*qty/1e9).toFixed(5))}); });
+    if(ref)out.push({ref:ref,mode:'bois',qte:qty,lng:lng,larg:w,ep:15,m3:Number((lng*w*15*qty/1e9).toFixed(5))}); });
   return out;
 }
 async function dikaSeedMapped(){
@@ -4067,13 +4077,13 @@ async function dikaSeedMapped(){
     const pref='PAL'+t.k+'-'+code, pdes='Palette '+t.des+' '+t.mes+' — '+lbl;
     arts.push({Ref:pref,Designation:pdes,Famille:'Produit fini',Unite:'U',TypePalette:'NEUF',Mesure:t.mes,StockMin:0});
     const pl=dikaGroups(t.pal[code]);
-    if(de) pl.push({ref:de,qte:9,prix:0,lng:90,larg:80,ep:75,m3:Number((90*80*75*9/1e9).toFixed(5))});
-    if(c64)pl.push({ref:c64,qte:45,prix:0,lng:'',larg:'',ep:''}); if(c50)pl.push({ref:c50,qte:18,prix:0,lng:'',larg:'',ep:''}); if(c45)pl.push({ref:c45,qte:t.c45,prix:0,lng:'',larg:'',ep:''});
+    if(de) pl.push({ref:de,mode:'bois',qte:9,lng:90,larg:80,ep:75,m3:Number((90*80*75*9/1e9).toFixed(5))});
+    if(c64)pl.push({ref:c64,mode:'unite',qte:45}); if(c50)pl.push({ref:c50,mode:'unite',qte:18}); if(c45)pl.push({ref:c45,mode:'unite',qte:t.c45});
     boms.push({ProduitRef:pref,Designation:pdes,lignes:pl});
     const cref='COV'+t.k+'-'+code, cdes='Couvercle '+t.des+' '+t.mes+' — '+lbl;
     arts.push({Ref:cref,Designation:cdes,Famille:'Produit fini',Unite:'U',TypePalette:'NEUF',Mesure:t.mes,StockMin:0});
     const cl=dikaGroups(t.cov[code]);
-    if(c30)cl.push({ref:c30,qte:t.c30,prix:0,lng:'',larg:'',ep:''});
+    if(c30)cl.push({ref:c30,mode:'unite',qte:t.c30});
     boms.push({ProduitRef:cref,Designation:cdes,lignes:cl});
   }); });
   try{
