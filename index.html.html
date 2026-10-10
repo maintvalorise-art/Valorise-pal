@@ -1159,6 +1159,7 @@ tr.alert td{background:var(--danger-soft)}
         <button class="addline" onclick="addBomLine()">+ Ajouter un composant</button>
         <button class="btn" style="width:100%;margin-top:12px" onclick="saveBom()">Enregistrer le BOM</button>
         <button class="btn ghost" style="width:100%;margin-top:8px" onclick="dikaSeed()">⚙ Importer le BOM DIKA (palettes 19/16/17/18 × 3 bois)</button>
+        <div id="dikaMap"></div>
       </div>
       <div class="card"><h3>BOM enregistrés</h3><div id="bomTable"></div></div>
       <div class="warnbox">Le prix d'un composant vient du prix d'achat moyen (entrées stock). Tu peux le forcer dans la colonne Prix.</div>
@@ -1447,7 +1448,7 @@ tr.alert td{background:var(--danger-soft)}
   </section>
 </main>
 
-<div class="foot">Valorise — outil interne · <b>version 10.4-SUPABASE · 03-01 · BOM DIKA (24 PF ×3 bois + composants m³/clous)</b> · <span id="userTag2"></span></div>
+<div class="foot">Valorise — outil interne · <b>version 10.5-SUPABASE · 03-01 · BOM DIKA mappé sur tes articles bois/clous existants</b> · <span id="userTag2"></span></div>
 </div><!-- /appWrap -->
 <div class="toast" id="toast"></div>
 
@@ -3954,49 +3955,64 @@ const DIKA_T=[
  {k:'17',des:'17',   mes:'1325*990', c45:36,c30:90,pal:{a:0.0255,b:0.0223,m100:0.0045,m75:0.0189},cov:{a:0.0192,b:0.0175,m100:0.0045,m75:0.0142}},
  {k:'18',des:'18',   mes:'1320*1115',c45:36,c30:90,pal:{a:0.0285,b:0.0229,m100:0.0054,m75:0.0189},cov:{a:0.0222,b:0.0182,m100:0.0054,m75:0.0142}}
 ];
-const DIKA_COMP=[
- {Ref:'BOIS-100',Designation:'Bois 100mm (planches)',Famille:'Matière première',Unite:'m³'},
- {Ref:'BOIS-75', Designation:'Bois 75mm (planches)', Famille:'Matière première',Unite:'m³'},
- {Ref:'DE-BLOC', Designation:'Dé / Bloc 90×80×75mm', Famille:'Matière première',Unite:'U'},
- {Ref:'CLOU-64', Designation:'Clou 64mm',             Famille:'Consommable',Unite:'U'},
- {Ref:'CLOU-50', Designation:'Clou 50mm',             Famille:'Consommable',Unite:'U'},
- {Ref:'CLOU-45', Designation:'Clou 45mm',             Famille:'Consommable',Unite:'U'},
- {Ref:'CLOU-30', Designation:'Clou 30mm (couvercle)', Famille:'Consommable',Unite:'U'}
-];
 const DIKA_VAR=[['100','bois 100mm'],['MIX','MIX 75/100'],['75','bois 75mm']];
-function dikaBois(code,m){ // retourne les lignes bois selon la variante
-  if(code==='100') return [{ref:'BOIS-100',qte:m.a,prix:0}];
-  if(code==='75')  return [{ref:'BOIS-75', qte:m.b,prix:0}];
-  return [{ref:'BOIS-100',qte:m.m100,prix:0},{ref:'BOIS-75',qte:m.m75,prix:0}];
+/* On NE CRÉE PAS de composants : le bois/clous/agrafes utilisent TES articles existants
+   (qui contiennent déjà la longueur). L'utilisateur mappe chaque rôle à un de ses articles. */
+const DIKA_ROLES=[
+ {key:'b100',label:'Bois 100mm (planches dessus)',hint:['bois','100']},
+ {key:'b75', label:'Bois 75mm (planches)',hint:['bois','75']},
+ {key:'de',  label:'Dé / Bloc (9 par palette)',hint:['de','bloc','dé','cube']},
+ {key:'c64', label:'Clou 64mm',hint:['clou','64']},
+ {key:'c50', label:'Clou 50mm',hint:['clou','50']},
+ {key:'c45', label:'Clou 45mm',hint:['clou','45']},
+ {key:'c30', label:'Clou / Agrafe 30mm (couvercle)',hint:['agraf','clou','30']}
+];
+function dikaArtOptions(sel){ const list=S.art.slice().sort(function(a,b){return String(a.Designation||a.Ref).localeCompare(String(b.Designation||b.Ref));});
+  return '<option value="">— choisir ton article —</option>'+list.map(function(a){ return '<option value="'+esc(a.Ref)+'"'+(String(a.Ref)===String(sel)?' selected':'')+'>'+esc(a.Ref)+' — '+esc(a.Designation||'')+'</option>'; }).join(''); }
+function dikaGuess(role){ const found=S.art.find(function(a){ const d=norm((a.Designation||'')+' '+(a.Ref||'')); return role.hint.every(function(h){return d.indexOf(norm(h))>=0;}); }); return found?found.Ref:''; }
+function dikaSeed(){ // ouvre le panneau d'association
+  const host=document.getElementById('dikaMap'); if(!host) return;
+  host.innerHTML='<div class="card" style="margin-top:10px;border:1px solid var(--gold,#c98a3a)">'
+   +'<h3>BOM DIKA — associe les composants à TES articles</h3>'
+   +'<p style="color:var(--muted);font-size:13px">Le bois, les clous et les agrafes gardent <b>tes articles existants</b> (avec la longueur). Rien n\'est créé en double. Seuls les 24 produits finis (palettes &amp; couvercles 19/16/17/18 × 3 bois) et leurs BOM sont créés. Laisse vide un rôle que tu n\'utilises pas.</p>'
+   +DIKA_ROLES.map(function(r){ return '<div class="field"><label>'+esc(r.label)+'</label><select id="dk_'+r.key+'">'+dikaArtOptions(dikaGuess(r))+'</select></div>'; }).join('')
+   +'<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">'
+   +'<button class="btn" onclick="dikaSeedMapped()">Créer les 24 produits finis + BOM</button>'
+   +'<button class="btn ghost" onclick="document.getElementById(\'dikaMap\').innerHTML=\'\'">Annuler</button></div></div>';
+  host.scrollIntoView({behavior:'smooth',block:'nearest'});
 }
-function dikaBuild(){
-  const arts=DIKA_COMP.map(function(c){ return Object.assign({TypePalette:'',Mesure:'',StockMin:0},c); });
-  const boms=[];
+function dikaRef(key){ const el=document.getElementById('dk_'+key); return el?el.value:''; }
+function dikaBoisMapped(code,m){ const b100=dikaRef('b100'),b75=dikaRef('b75'),out=[];
+  if(code==='100'){ if(b100)out.push({ref:b100,qte:m.a,prix:0}); }
+  else if(code==='75'){ if(b75)out.push({ref:b75,qte:m.b,prix:0}); }
+  else { if(b100)out.push({ref:b100,qte:m.m100,prix:0}); if(b75)out.push({ref:b75,qte:m.m75,prix:0}); }
+  return out;
+}
+async function dikaSeedMapped(){
+  const de=dikaRef('de'),c64=dikaRef('c64'),c50=dikaRef('c50'),c45=dikaRef('c45'),c30=dikaRef('c30');
+  if(!dikaRef('b100')&&!dikaRef('b75')){ toast('Associe au moins un article bois','err'); return; }
+  if(!confirm('Créer 24 produits finis (palettes & couvercles 19/16/17/18 × 3 bois) + leurs BOM ?\n\nLes composants resteront TES articles existants (aucun créé en double). Les réfs PF existantes seront mises à jour.')) return;
+  const arts=[],boms=[];
   DIKA_T.forEach(function(t){ DIKA_VAR.forEach(function(v){ const code=v[0],lbl=v[1];
-    // PALETTE
     const pref='PAL'+t.k+'-'+code, pdes='Palette '+t.des+' '+t.mes+' — '+lbl;
     arts.push({Ref:pref,Designation:pdes,Famille:'Produit fini',Unite:'U',TypePalette:'NEUF',Mesure:t.mes,StockMin:0});
-    const pl=dikaBois(code,t.pal);
-    pl.push({ref:'DE-BLOC',qte:9,prix:0},{ref:'CLOU-64',qte:45,prix:0},{ref:'CLOU-50',qte:18,prix:0},{ref:'CLOU-45',qte:t.c45,prix:0});
+    const pl=dikaBoisMapped(code,t.pal);
+    if(de) pl.push({ref:de,qte:9,prix:0});
+    if(c64)pl.push({ref:c64,qte:45,prix:0}); if(c50)pl.push({ref:c50,qte:18,prix:0}); if(c45)pl.push({ref:c45,qte:t.c45,prix:0});
     boms.push({ProduitRef:pref,Designation:pdes,lignes:pl});
-    // COUVERCLE
     const cref='COV'+t.k+'-'+code, cdes='Couvercle '+t.des+' '+t.mes+' — '+lbl;
     arts.push({Ref:cref,Designation:cdes,Famille:'Produit fini',Unite:'U',TypePalette:'NEUF',Mesure:t.mes,StockMin:0});
-    const cl=dikaBois(code,t.cov);
-    cl.push({ref:'CLOU-30',qte:t.c30,prix:0});
+    const cl=dikaBoisMapped(code,t.cov);
+    if(c30)cl.push({ref:c30,qte:t.c30,prix:0});
     boms.push({ProduitRef:cref,Designation:cdes,lignes:cl});
   }); });
-  return {arts:arts,boms:boms};
-}
-async function dikaSeed(){
-  if(!confirm('Importer le BOM DIKA ?\n\n7 composants (bois 100/75, dés, clous 64/50/45/30) + 24 produits finis (palettes & couvercles 19/16/17/18 × 3 variantes bois) et leurs BOM.\n\nLes articles/BOM existants de même réf seront mis à jour.')) return;
-  const d=dikaBuild();
   try{
-    await api('saveArticlesBulk',{password:ADMIN_PWD,rows:d.arts});
-    for(var i=0;i<d.boms.length;i++){ await api('saveBom',{password:ADMIN_PWD,bom:d.boms[i]}); }
+    await api('saveArticlesBulk',{password:ADMIN_PWD,rows:arts});
+    for(var i=0;i<boms.length;i++){ await api('saveBom',{password:ADMIN_PWD,bom:boms[i]}); }
     try{ const b=await api('bootstrap',{date:todayStr()}); if(b&&b.articles) S.art=b.articles; }catch(e){}
     await loadBomData(); fillBomProd(); renderBomTable();
-    toast('BOM DIKA importé : '+d.arts.length+' articles · '+d.boms.length+' BOM ✔','ok');
+    document.getElementById('dikaMap').innerHTML='';
+    toast('BOM DIKA créé : '+arts.length+' produits finis · '+boms.length+' BOM ✔','ok');
   }catch(e){ toast(e.message||'Erreur import','err'); }
 }
 
