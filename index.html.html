@@ -1389,9 +1389,64 @@ tr.alert td{background:var(--danger-soft)}
       </div>
     </div>
   </section>
+
+  <!-- ============ DEMANDE D'ACHAT (admin) ============ -->
+  <section class="view" data-view="demachat">
+    <div class="vhead"><div class="eyebrow">Achats · Valorise 2</div><h2>Demande d'achat</h2>
+      <p>Matière première, consommable, matériel, équipement, EPI… Remplis, génère le PDF et suis le statut.</p></div>
+    <div class="admin-body" data-admin="demachat">
+      <datalist id="achArtList"></datalist>
+      <div class="card">
+        <div class="grid g3" style="margin-bottom:10px">
+          <div class="field"><label>N° demande</label><input id="achNum" readonly></div>
+          <div class="field"><label>Date</label><input type="date" id="achDate"></div>
+          <div class="field"><label>Demandeur</label><input id="achDemandeur" placeholder="Nom &amp; fonction"></div>
+        </div>
+        <div class="grid g3" style="margin-bottom:10px">
+          <div class="field"><label>Catégorie</label><select id="achCat">
+            <option>Matière première</option><option>Consommable</option><option>Matériel</option>
+            <option>Équipement</option><option>EPI</option><option>Autre</option></select></div>
+          <div class="field"><label>Priorité</label><select id="achPrio"><option>Normale</option><option>Urgente</option><option>Critique</option></select></div>
+          <div class="field"><label>Destination</label><input id="achDest" value="Valorise 2"></div>
+        </div>
+        <div class="field" style="margin-bottom:10px"><label>Besoin pour le (souhaité)</label><input type="date" id="achBesoin"></div>
+        <h3 style="margin:6px 0">Articles demandés</h3>
+        <div class="tbl-wrap"><table><thead><tr><th style="width:38%">Désignation</th><th>Référence</th><th style="width:90px">Qté</th><th style="width:110px">Unité</th><th>Observation</th><th></th></tr></thead><tbody id="achLines"></tbody></table></div>
+        <button class="btn ghost sm" style="margin-top:8px" onclick="achAddLine()">+ Ajouter une ligne</button>
+        <div class="field" style="margin-top:12px"><label>Justification / observations générales</label><textarea id="achNote" rows="2" placeholder="Motif de la demande, usage prévu…"></textarea></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
+          <button class="btn" onclick="achSaveAndPdf()">Enregistrer + PDF</button>
+          <button class="btn ghost" onclick="achSave()">Enregistrer</button>
+          <button class="btn ghost" onclick="achPdf()">PDF seul</button>
+          <button class="btn ghost" onclick="initAchat()">Vider</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ SUIVI ACHATS (admin) ============ -->
+  <section class="view" data-view="suiviachat">
+    <div class="vhead"><div class="eyebrow">Achats · Valorise 2</div><h2>Suivi des demandes d'achat</h2>
+      <p>Envoyée au service achats → En traitement → Réceptionnée → Clôturée.</p></div>
+    <div class="admin-body" data-admin="suiviachat">
+      <div class="card">
+        <div class="grid g3" style="margin-bottom:10px">
+          <div class="field"><label>Statut</label><select id="achfStatut" onchange="renderSuiviAchat()">
+            <option value="">Tous</option><option>Envoyée au service achats</option><option>En traitement</option>
+            <option>Réceptionnée</option><option>Clôturée</option><option>Annulée</option></select></div>
+          <div class="field"><label>Catégorie</label><select id="achfCat" onchange="renderSuiviAchat()">
+            <option value="">Toutes</option><option>Matière première</option><option>Consommable</option><option>Matériel</option>
+            <option>Équipement</option><option>EPI</option><option>Autre</option></select></div>
+          <div class="field"><label>Recherche</label><input id="achfSearch" oninput="renderSuiviAchat()" placeholder="n°, demandeur, article"></div>
+        </div>
+        <div id="achStats" class="info" style="margin-bottom:10px"></div>
+      </div>
+      <div id="achSuiviBody"></div>
+    </div>
+  </section>
 </main>
 
-<div class="foot">Valorise — outil interne · <b>version 10.2-SUPABASE · 03-01 · fiche ref tacon+designation+pdf conso</b> · <span id="userTag2"></span></div>
+<div class="foot">Valorise — outil interne · <b>version 10.3-SUPABASE · 03-01 · module Achats (demande + suivi statut + PDF Valorise 2)</b> · <span id="userTag2"></span></div>
 </div><!-- /appWrap -->
 <div class="toast" id="toast"></div>
 
@@ -1480,7 +1535,7 @@ async function sbForgot(){ const em=document.getElementById('lgEmail').value.tri
   if(!em){ msg.textContent='Saisis ton email d\'abord'; return; }
   const {error}=await SB.auth.resetPasswordForEmail(em); msg.textContent=error?('Erreur : '+error.message):'Email de réinitialisation envoyé ✔ (vérifie ta boîte)'; }
 async function sbLogout(){ await SB.auth.signOut(); location.reload(); }
-const WRITE=['saveEmploye','deleteEmploye','saveAffectation','savePlanning','saveAbsence','saveArticle','deleteArticle','saveEntree','saveSortie','saveCommande','saveOrdreProd','saveFiche','deleteFiche','savePoste','deletePoste','saveBom','deleteBom','saveQuotation','setAdminPassword','saveLivraison','savePlanLiv','setBlNext','importLivraisons','updateLivraison','deleteLivraison','clearLivraisons','deleteLivBulk','deleteFicheAbsence','saveTraitement','deleteTraitement','saveCommandesSemaine','saveZ2Mouv','deleteZ2Mouv','saveZ2Article','deleteZ2Article','importZ2','clearZ2','saveNoteTL','saveDemande','deleteDemande','saveContrat','saveInventaire','saveObjectifs','saveEcheances','saveQualite','deleteQualite','saveArticlesBulk','saveQcCtrl'];
+const WRITE=['saveEmploye','deleteEmploye','saveAffectation','savePlanning','saveAbsence','saveArticle','deleteArticle','saveEntree','saveSortie','saveCommande','saveOrdreProd','saveFiche','deleteFiche','savePoste','deletePoste','saveBom','deleteBom','saveQuotation','setAdminPassword','saveLivraison','savePlanLiv','setBlNext','importLivraisons','updateLivraison','deleteLivraison','clearLivraisons','deleteLivBulk','deleteFicheAbsence','saveTraitement','deleteTraitement','saveCommandesSemaine','saveZ2Mouv','deleteZ2Mouv','saveZ2Article','deleteZ2Article','importZ2','clearZ2','saveNoteTL','saveDemande','deleteDemande','saveContrat','saveInventaire','saveObjectifs','saveEcheances','saveQualite','deleteQualite','saveArticlesBulk','saveQcCtrl','saveAchat','deleteAchat'];
 
 async function fb_importLivraisons(p){ const docs=p.docs||[];
   for(var i=0;i<docs.length;i+=400){ const batch=db.batch();
@@ -1556,6 +1611,9 @@ async function route(action,p){
     case 'getQualite':     { const s=await db.collection('qualite').get(); return {ok:true, rows:s.docs.map(function(d){return Object.assign({QID:d.id},d.data());})}; }
     case 'saveQualite':    { const id=(p.rec&&p.rec.QID)||uid('QC-'); await db.collection('qualite').doc(id).set(Object.assign({},p.rec,{QID:id})); return {ok:true,id:id}; }
     case 'deleteQualite':  if(p.id) await db.collection('qualite').doc(String(p.id)).delete(); return {ok:true};
+    case 'getAchats':      { const s=await db.collection('achats').get(); return {ok:true, rows:s.docs.map(function(d){return Object.assign({AID:d.id},d.data());})}; }
+    case 'saveAchat':      { const id=(p.rec&&p.rec.AID)||uid('DA-'); await db.collection('achats').doc(id).set(Object.assign({},p.rec,{AID:id})); return {ok:true,id:id}; }
+    case 'deleteAchat':    if(p.id) await db.collection('achats').doc(String(p.id)).delete(); return {ok:true};
     case 'getQcCtrl':      { const d=await db.collection('config').doc('qcControleurs').get(); return {ok:true, data:(d.exists?d.data():null)}; }
     case 'saveQcCtrl':     await db.collection('config').doc('qcControleurs').set(p.data||{}); return {ok:true};
     case 'getEcheances':   { const d=await db.collection('config').doc('echeances').get(); return {ok:true, data:(d.exists?d.data():null)}; }
@@ -1826,6 +1884,7 @@ const MODULES = {
   rh:    {label:'Gestion RH',       tabs:[['employes','Employés'],['affect','Affectation'],['postes','Postes'],['matrice','Matrice'],['recap','Recap abs.'],['abshisto','Fiches absence'],['demrh','Demandes'],['notation','Notation'],['transport','Transport']]},
   stock: {label:'Gestion de Stock', tabs:[['stock','Stock'],['entree','Entrée stock'],['sortie','Sortie stock'],['inventaire','Inventaire'],['etatstock','État stock mensuel'],['livnew','Bon Livraison'],['livreg','Registre BL'],['etatbl','État BL'],['planliv','Planning Livraison'],['articles','Articles']]},
   trt:   {label:'Traitement',        tabs:[['trait','Fiche traitement'],['etattrait','État Traitement'],['echeances','Échéances']]},
+  achats:{label:'Achats',           tabs:[['demachat','Demande d\'achat'],['suiviachat','Suivi achats']]},
   config:{label:'Config',           tabs:[['objectifs','Objectifs'],['import','Import Excel'],['reglages','Réglages']]}
 };
 let ROLE=null, CURMOD=null;
@@ -2004,6 +2063,8 @@ function onEnter(v){
   if(v==='z2liv'){ document.getElementById('z2lDate').value=S.today; z2LoadAll(function(){z2Render('OUT');}); }
   if(v==='z2stock') z2Stock();
   if(v==='z2art') z2LoadAll(function(){z2RenderArt();});
+  if(v==='demachat') initAchat();
+  if(v==='suiviachat') initSuiviAchat();
 }
 
 /* ================= BOOTSTRAP ================= */
@@ -4690,6 +4751,130 @@ function kExportPdf(){
   });
   doc.save('KPI_production.pdf');
 }
+
+/* ================= ACHATS (demandes d'achat Valorise 2) ================= */
+let ACH_ALL=[];
+const ACH_UNITS=['U','Kg','L','m','m²','m³','Palette','Lot','Rouleau','Boîte','Sac','Paire'];
+const ACH_FLOW=['Envoyée au service achats','En traitement','Réceptionnée','Clôturée'];
+function achUnitOpts(sel){ return ACH_UNITS.map(function(u){ return '<option'+(u===sel?' selected':'')+'>'+u+'</option>'; }).join(''); }
+function achLineHtml(l){ l=l||{};
+  return '<tr>'
+    +'<td><input class="achDes" list="achArtList" value="'+esc(l.des||'')+'" oninput="achRefFromDes(this)" placeholder="désignation"></td>'
+    +'<td><input class="achRef" value="'+esc(l.ref||'')+'" placeholder="réf (option.)"></td>'
+    +'<td><input class="achQte" type="number" min="0" step="any" value="'+esc(l.qte||'')+'" style="width:80px"></td>'
+    +'<td><select class="achUn">'+achUnitOpts(l.unite||'U')+'</select></td>'
+    +'<td><input class="achObs" value="'+esc(l.obs||'')+'" placeholder="observation"></td>'
+    +'<td><button class="btn link" onclick="this.closest(\'tr\').remove()">✕</button></td></tr>'; }
+function achAddLine(l){ document.getElementById('achLines').insertAdjacentHTML('beforeend', achLineHtml(l)); }
+function achRefFromDes(input){ const a=(S.art||[]).find(function(x){return String(x.Designation||'')===input.value.trim();}); if(a){ const ref=input.closest('tr').querySelector('.achRef'); if(ref&&!ref.value) ref.value=a.Ref; } }
+function initAchat(){
+  const dl=document.getElementById('achArtList'); if(dl) dl.innerHTML=(S.art||[]).map(function(a){return '<option value="'+esc(a.Designation||'')+'">'+esc(a.Ref)+'</option>';}).join('');
+  document.getElementById('achNum').value=uid('DA-');
+  document.getElementById('achDate').value=S.today;
+  document.getElementById('achBesoin').value='';
+  document.getElementById('achDemandeur').value='Ayman Bhar — Responsable Unité Production';
+  document.getElementById('achCat').value='Matière première';
+  document.getElementById('achPrio').value='Normale';
+  document.getElementById('achDest').value='Valorise 2';
+  document.getElementById('achNote').value='';
+  document.getElementById('achLines').innerHTML=''; achAddLine();
+}
+function achGather(){
+  const lignes=[].map.call(document.querySelectorAll('#achLines tr'),function(tr){
+    return { des:tr.querySelector('.achDes').value.trim(), ref:tr.querySelector('.achRef').value.trim(),
+      qte:tr.querySelector('.achQte').value, unite:tr.querySelector('.achUn').value, obs:tr.querySelector('.achObs').value.trim() };
+  }).filter(function(l){ return l.des||l.ref||l.qte; });
+  return { AID:document.getElementById('achNum').value, Num:document.getElementById('achNum').value,
+    Date:document.getElementById('achDate').value, Besoin:document.getElementById('achBesoin').value,
+    Demandeur:document.getElementById('achDemandeur').value.trim(), Categorie:document.getElementById('achCat').value,
+    Priorite:document.getElementById('achPrio').value, Destination:document.getElementById('achDest').value.trim()||'Valorise 2',
+    Note:document.getElementById('achNote').value.trim(), lignes:lignes, Statut:'Envoyée au service achats' };
+}
+async function achSave(silent){
+  const rec=achGather();
+  if(!rec.lignes.length){ toast('Ajoute au moins un article','err'); return null; }
+  const ex=ACH_ALL.find(function(x){return x.AID===rec.AID;});
+  if(ex){ rec.Statut=ex.Statut||rec.Statut; rec.hist=ex.hist||[]; } else { rec.hist=[{s:rec.Statut,t:new Date().toISOString()}]; }
+  try{ await api('saveAchat',{password:ADMIN_PWD,rec:rec});
+    const i=ACH_ALL.findIndex(function(x){return x.AID===rec.AID;}); if(i>=0)ACH_ALL[i]=rec; else ACH_ALL.unshift(rec);
+    if(!silent) toast('Demande enregistrée','ok'); return rec;
+  }catch(e){ toast(e.message||'Erreur','err'); return null; }
+}
+async function achSaveAndPdf(){ const r=await achSave(true); if(r){ toast('Enregistrée','ok'); achPdf(r); } }
+function achFind(id){ return ACH_ALL.find(function(x){return x.AID===id;}); }
+function achPdf(rec){
+  rec=(rec&&rec.lignes)?rec:achGather();
+  const J=window.jspdf; if(!J||!J.jsPDF){ toast('PDF indisponible (besoin d\'internet)','err'); return; }
+  const doc=new J.jsPDF({unit:'mm',format:'a4'});
+  doc.setFillColor(22,74,52); doc.rect(0,0,210,22,'F');
+  doc.setTextColor(255); doc.setFont('helvetica','bold'); doc.setFontSize(16); doc.text('VALORISE 2',14,11);
+  doc.setFontSize(12); doc.text('DEMANDE D\'ACHAT',14,18);
+  doc.setFontSize(9); doc.setFont('helvetica','normal'); doc.text('N° '+(rec.Num||rec.AID),196,11,{align:'right'});
+  doc.text('Producteur ISPM 15 : MA-3403 HT',196,17,{align:'right'});
+  doc.setTextColor(25); doc.setFontSize(10);
+  let y=30;
+  doc.setFont(undefined,'bold'); doc.text('Date : ',14,y); doc.setFont(undefined,'normal'); doc.text(String(rec.Date||''),30,y);
+  doc.setFont(undefined,'bold'); doc.text('Besoin pour : ',110,y); doc.setFont(undefined,'normal'); doc.text(String(rec.Besoin||'—'),140,y); y+=6;
+  doc.setFont(undefined,'bold'); doc.text('Demandeur : ',14,y); doc.setFont(undefined,'normal'); doc.text(String(rec.Demandeur||''),40,y); y+=6;
+  doc.setFont(undefined,'bold'); doc.text('Catégorie : ',14,y); doc.setFont(undefined,'normal'); doc.text(String(rec.Categorie||''),40,y);
+  doc.setFont(undefined,'bold'); doc.text('Priorité : ',110,y); doc.setFont(undefined,'normal'); doc.text(String(rec.Priorite||''),135,y); y+=6;
+  doc.setFont(undefined,'bold'); doc.text('Destination : ',14,y); doc.setFont(undefined,'normal'); doc.text(String(rec.Destination||'Valorise 2'),40,y);
+  doc.setFont(undefined,'bold'); doc.text('Statut : ',110,y); doc.setFont(undefined,'normal'); doc.text(String(rec.Statut||'Envoyée au service achats'),130,y); y+=5;
+  doc.autoTable({ startY:y, head:[['#','Désignation','Référence','Qté','Unité','Observation']],
+    body:(rec.lignes||[]).map(function(l,i){ return [i+1,l.des||'',l.ref||'',l.qte||'',l.unite||'',l.obs||'']; }),
+    styles:{fontSize:9}, headStyles:{fillColor:[46,125,85]}, columnStyles:{0:{cellWidth:8}} });
+  y=doc.lastAutoTable.finalY+8;
+  if(rec.Note){ doc.setFont(undefined,'bold'); doc.text('Justification / observations :',14,y); y+=5; doc.setFont(undefined,'normal');
+    doc.text(doc.splitTextToSize(String(rec.Note),180),14,y); y+=12; }
+  y=Math.max(y,245);
+  doc.setDrawColor(200); doc.setFont(undefined,'bold'); doc.setFontSize(9);
+  doc.text('Demandeur',24,y); doc.text('Service Achats',98,y); doc.text('Direction',168,y);
+  doc.setFont(undefined,'normal'); [18,92,162].forEach(function(x){ doc.line(x,y+16,x+44,y+16); });
+  doc.setFontSize(8); doc.setTextColor(120);
+  doc.text('Valorise Maroc · Zone Franche Tanger · MA-3403 HT · Édité le '+new Date().toISOString().slice(0,10),14,290);
+  doc.save('Demande_achat_'+(rec.Num||rec.AID)+'.pdf');
+}
+/* ---- Suivi ---- */
+function initSuiviAchat(){ api('getAchats',{}).then(function(r){ ACH_ALL=(r.rows||[]).sort(function(a,b){return (a.Date<b.Date?1:-1);}); renderSuiviAchat(); }).catch(function(e){ toast(e.message||'Erreur','err'); }); }
+function achStatutBadge(s){ const map={'Envoyée au service achats':'#6b7280','En traitement':'#c98a3a','Réceptionnée':'#2e7d55','Clôturée':'#164a34','Annulée':'#b02a2a'};
+  return '<span style="background:'+(map[s]||'#6b7280')+';color:#fff;padding:2px 8px;border-radius:10px;font-size:11px;white-space:nowrap">'+esc(s||'')+'</span>'; }
+function achNext(s){ const i=ACH_FLOW.indexOf(s); return (i>=0&&i<ACH_FLOW.length-1)?ACH_FLOW[i+1]:null; }
+function achFiltered(){
+  const st=document.getElementById('achfStatut').value, cat=document.getElementById('achfCat').value, q=(document.getElementById('achfSearch').value||'').toLowerCase();
+  return ACH_ALL.filter(function(d){
+    if(st&&(d.Statut||'')!==st) return false;
+    if(cat&&(d.Categorie||'')!==cat) return false;
+    if(q){ const hay=((d.Num||'')+' '+(d.Demandeur||'')+' '+(d.Categorie||'')+' '+(d.lignes||[]).map(function(l){return l.des+' '+l.ref;}).join(' ')).toLowerCase(); if(hay.indexOf(q)<0) return false; }
+    return true;
+  });
+}
+function renderSuiviAchat(){
+  const rows=achFiltered();
+  const by={}; ACH_ALL.forEach(function(d){ const s=d.Statut||'Envoyée au service achats'; by[s]=(by[s]||0)+1; });
+  document.getElementById('achStats').innerHTML='Total : <b>'+ACH_ALL.length+'</b> · '
+    +ACH_FLOW.concat(['Annulée']).map(function(s){ return esc(s)+' : <b>'+(by[s]||0)+'</b>'; }).join(' · ');
+  document.getElementById('achSuiviBody').innerHTML = rows.length? '<div class="tbl-wrap"><table><thead><tr><th>N°</th><th>Date</th><th>Demandeur</th><th>Catégorie</th><th>Articles</th><th>Prio.</th><th>Statut</th><th>Actions</th></tr></thead><tbody>'
+    +rows.map(function(d){
+      const nx=achNext(d.Statut);
+      const nb=(d.lignes||[]).length;
+      const art=(d.lignes||[]).slice(0,2).map(function(l){return esc(l.des||l.ref);}).join(', ')+(nb>2?' +'+(nb-2):'');
+      let act='';
+      if(nx) act+='<button class="btn sm" onclick="achAdvance(\''+esc(d.AID)+'\')">'+(nx==='En traitement'?'Traiter':nx==='Réceptionnée'?'Réceptionner':'Clôturer')+'</button> ';
+      act+='<button class="btn sm ghost" onclick="achPdfId(\''+esc(d.AID)+'\')">PDF</button> ';
+      if((d.Statut||'')!=='Annulée'&&(d.Statut||'')!=='Clôturée') act+='<button class="btn link" onclick="achCancel(\''+esc(d.AID)+'\')">Annuler</button> ';
+      act+='<button class="btn link" onclick="achDelete(\''+esc(d.AID)+'\')">✕</button>';
+      return '<tr><td style="white-space:nowrap">'+esc(d.Num||d.AID)+'</td><td>'+esc(d.Date||'')+'</td><td>'+esc(d.Demandeur||'')+'</td><td>'+esc(d.Categorie||'')+'</td><td>'+art+' <span style="color:#888">('+nb+')</span></td><td>'+esc(d.Priorite||'')+'</td><td>'+achStatutBadge(d.Statut)+'</td><td style="white-space:nowrap">'+act+'</td></tr>';
+    }).join('')+'</tbody></table></div>'
+    : '<div class="empty">Aucune demande d\'achat.</div>';
+}
+function achPersist(d,msg){ api('saveAchat',{password:ADMIN_PWD,rec:d}).then(function(){ renderSuiviAchat(); if(msg)toast(msg,'ok'); }).catch(function(e){ toast(e.message||'Erreur','err'); }); }
+function achAdvance(id){ const d=achFind(id); if(!d)return; const nx=achNext(d.Statut); if(!nx){ toast('Déjà clôturée','err'); return; }
+  d.Statut=nx; d.hist=(d.hist||[]); d.hist.push({s:nx,t:new Date().toISOString()}); achPersist(d,'Statut : '+nx); }
+function achCancel(id){ const d=achFind(id); if(!d)return; if(!confirm('Annuler cette demande ?'))return;
+  d.Statut='Annulée'; d.hist=(d.hist||[]); d.hist.push({s:'Annulée',t:new Date().toISOString()}); achPersist(d,'Annulée'); }
+function achPdfId(id){ const d=achFind(id); if(d) achPdf(d); }
+function achDelete(id){ if(!confirm('Supprimer définitivement cette demande ?'))return;
+  api('deleteAchat',{password:ADMIN_PWD,id:id}).then(function(){ ACH_ALL=ACH_ALL.filter(function(x){return x.AID!==id;}); renderSuiviAchat(); toast('Supprimée','ok'); }).catch(function(e){ toast(e.message||'Erreur','err'); }); }
 
 sbInit();
 </script>
