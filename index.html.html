@@ -1463,7 +1463,7 @@ tr.alert td{background:var(--danger-soft)}
   </section>
 </main>
 
-<div class="foot">Valorise — outil interne · <b>version 10.8-SUPABASE · 03-01 · BOM mode Bois(m³)/Unité par ligne + clous en qté</b> · <span id="userTag2"></span></div>
+<div class="foot">Valorise — outil interne · <b>version 10.9-SUPABASE · 03-01 · BOM dims auto depuis l'article + cases plus larges</b> · <span id="userTag2"></span></div>
 </div><!-- /appWrap -->
 <div class="toast" id="toast"></div>
 
@@ -3976,7 +3976,7 @@ function addBomLine(l){ l=l||{};
   const v=function(x){return (x!=null&&x!=='')?x:'';};
   const mode=l.mode||((l.larg||l.ep)?'bois':'unite');
   const div=document.createElement('div'); div.className='linerow bom8';
-  div.innerHTML='<div><select class="bmRef" onchange="bomCalc()">'+bomCompoOptions(l.ref)+'</select></div>'
+  div.innerHTML='<div><select class="bmRef" onchange="bomRefPick(this)">'+bomCompoOptions(l.ref)+'</select></div>'
     +'<div><select class="bmMode" onchange="bomModeUpd(this)"><option value="bois"'+(mode==='bois'?' selected':'')+'>Bois m³</option><option value="unite"'+(mode==='unite'?' selected':'')+'>Unité</option></select></div>'
     +'<div><input type="number" class="bmL" placeholder="Long mm" value="'+v(l.lng)+'" oninput="bomCalc()"></div>'
     +'<div><input type="number" class="bmW" placeholder="Larg mm" value="'+v(l.larg)+'" oninput="bomCalc()"></div>'
@@ -3987,6 +3987,17 @@ function addBomLine(l){ l=l||{};
   document.getElementById('bomLines').appendChild(div);
   bomModeUpd(div.querySelector('.bmMode'));
 }
+function bomParseDims(a){ if(!a)return null; const s=String(a.Designation||'')+' '+String(a.Ref||'');
+  let m=s.match(/(\d{2,4})\s*[×xX*]\s*(\d{2,4})\s*[×xX*]\s*(\d{1,4})/);
+  if(m) return {L:+m[1],W:+m[2],E:+m[3]};
+  const r=String(a.Ref||'').match(/(\d{2,4})\D+(\d{2,4})\D+(\d{1,4})/);
+  if(r) return {L:+r[1],W:+r[2],E:+r[3]};
+  return null; }
+function bomRefPick(sel){ const r=sel.closest('.linerow'); const a=(S.art||[]).find(function(x){return String(x.Ref)===sel.value;});
+  const d=a?bomParseDims(a):null;
+  if(d){ r.querySelector('.bmMode').value='bois'; r.querySelector('.bmL').value=d.L; r.querySelector('.bmW').value=d.W; r.querySelector('.bmE').value=d.E; bomModeUpd(r.querySelector('.bmMode')); }
+  else if(a && /clou|agraf|\bvis\b|pointe/.test(norm(a.Designation||'')+' '+norm(a.Ref||''))){ r.querySelector('.bmMode').value='unite'; bomModeUpd(r.querySelector('.bmMode')); }
+  bomCalc(); }
 function bomModeUpd(sel){ if(!sel)return; const r=sel.closest('.linerow'); const unit=(sel.value==='unite');
   ['.bmL','.bmW','.bmE'].forEach(function(c){ const el=r.querySelector(c); if(el){ el.disabled=unit; el.style.opacity=unit?0.4:1; el.placeholder=unit?'—':c.replace('.bm','').replace('L','Long mm').replace('W','Larg mm').replace('E','Épais mm'); } });
   const q=r.querySelector('.bmQte'); if(q) q.placeholder=unit?'Qté (pièces)':'Nb planches';
