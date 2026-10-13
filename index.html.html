@@ -189,6 +189,12 @@ tr.alert td{background:var(--danger-soft)}
 .linerow{display:grid;grid-template-columns:1fr 110px 40px;gap:8px;align-items:end;margin-bottom:8px}
 .linerow.wide{grid-template-columns:1fr 100px 90px 1fr 40px}
 .linerow.bom8{grid-template-columns:minmax(150px,1fr) 78px 72px 70px 70px 66px 82px 28px}
+.pisto-pt{position:absolute;transform:translate(-50%,-50%);color:#fff;border:2px solid #fff;border-radius:50%;width:28px;height:28px;font-size:10px;font-weight:700;cursor:pointer;box-shadow:0 1px 4px rgba(0,0,0,.45);padding:0;line-height:1;display:flex;align-items:center;justify-content:center}
+.poste-chips{display:grid;grid-template-columns:repeat(auto-fill,minmax(86px,1fr));gap:8px;margin-top:4px}
+.poste-chip{display:flex;flex-direction:column;align-items:flex-start;gap:2px;padding:8px 10px;border-radius:10px;border:1px solid var(--line,#ddd);border-left-width:5px;background:var(--card,#fff);cursor:pointer;font-size:12px;text-align:left}
+.poste-chip b{font-size:13px}
+.poste-chip .pc-ref{color:var(--muted,#777);font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+@media(max-width:720px){ .pisto-pt{width:20px;height:20px;font-size:9px;border-width:1.5px} }
 .xbtn{background:var(--danger-soft);color:var(--danger);border:none;border-radius:8px;height:40px;font-size:18px;cursor:pointer}
 .addline{background:none;border:1px dashed var(--green2);color:var(--green2);padding:8px;border-radius:8px;width:100%;font-weight:600;cursor:pointer;font-size:13.5px}
 .addline:hover{background:var(--green-soft)}
@@ -1462,7 +1468,11 @@ tr.alert td{background:var(--danger-soft)}
         <img id="layoutImg" alt="Plan Zone 1" style="width:100%;display:block;border-radius:10px">
         <div id="layoutPts"></div>
       </div>
-      <p style="color:var(--muted);font-size:12px;margin-top:6px">Les pastilles vertes = pistolet renseigné · oranges = demande de changement en attente · grises = vide.</p>
+      <p style="color:var(--muted);font-size:12px;margin-top:6px">🟢 pistolet affecté · 🟠 demande en attente · ⚪ vide. Sur téléphone, utilise la liste des postes ci-dessous.</p>
+    </div>
+    <div class="card">
+      <h3>Postes — clique pour gérer</h3>
+      <div id="layoutChips" class="poste-chips"></div>
     </div>
     <div class="card" id="layoutPanel" style="display:none"></div>
     <div class="card"><h3>Historique des pistolets</h3><div id="pistoHisto"></div></div>
@@ -1524,7 +1534,7 @@ tr.alert td{background:var(--danger-soft)}
   </section>
 </main>
 
-<div class="foot">Valorise — outil interne · <b>version 11.1-SUPABASE · 03-01 · Stock Matériel pistolets (Affecté/En stock/En panne) + changement par liste</b> · <span id="userTag2"></span></div>
+<div class="foot">Valorise — outil interne · <b>version 11.2-SUPABASE · 03-01 · Layout responsive mobile + liste postes cliquable</b> · <span id="userTag2"></span></div>
 </div><!-- /appWrap -->
 <div class="toast" id="toast"></div>
 
@@ -5137,11 +5147,16 @@ function matEnStock(){ return MAT.filter(function(m){return m.Etat==='En stock';
 function initLayout(){ const img=document.getElementById('layoutImg'); if(img&&!img.src.startsWith('data:')) img.src=LAYOUT_IMG;
   document.getElementById('layoutPanel').style.display='none';
   Promise.all([api('getPistolets',{}),api('getMateriel',{})]).then(function(r){ PISTO=r[0].rows||[]; MAT=r[1].rows||[]; layoutRenderPts(); renderPistoHisto(); }).catch(function(){ layoutRenderPts(); renderPistoHisto(); }); }
-function layoutRenderPts(){ const host=document.getElementById('layoutPts'); if(!host)return;
-  host.innerHTML=Object.keys(POSTE_COORDS).map(function(code){ const c=POSTE_COORDS[code]; const p=pistoOf(code); const cur=posteCurrent(code);
-    const col=(p&&p.pending)?'#c98a3a':(cur?'#2e7d55':'#8a8a8a');
-    return '<button class="pisto-pt" onclick="layoutOpen(\''+code+'\')" title="'+code+'" style="position:absolute;left:'+c[0]+'%;top:'+c[1]+'%;transform:translate(-50%,-50%);background:'+col+';color:#fff;border:2px solid #fff;border-radius:50%;width:30px;height:30px;font-size:10px;font-weight:700;cursor:pointer;box-shadow:0 1px 4px rgba(0,0,0,.45);padding:0">'+code.replace('P','')+'</button>';
-  }).join(''); }
+function posteColor(code){ const p=pistoOf(code); const cur=posteCurrent(code); return (p&&p.pending)?'#c98a3a':(cur?'#2e7d55':'#8a8a8a'); }
+function layoutRenderPts(){ const host=document.getElementById('layoutPts'); if(host){
+    host.innerHTML=Object.keys(POSTE_COORDS).map(function(code){ const c=POSTE_COORDS[code];
+      return '<button class="pisto-pt" onclick="layoutOpen(\''+code+'\')" title="'+code+'" style="left:'+c[0]+'%;top:'+c[1]+'%;background:'+posteColor(code)+'">'+code.replace('P','')+'</button>';
+    }).join(''); }
+  const chips=document.getElementById('layoutChips'); if(chips){
+    chips.innerHTML=Object.keys(POSTE_COORDS).map(function(code){ const cur=posteCurrent(code); const p=pistoOf(code);
+      const lbl=p&&p.pending?'⏳ en attente':(cur?esc(cur.Ref):'vide');
+      return '<div class="poste-chip" onclick="layoutOpen(\''+code+'\')" style="border-left-color:'+posteColor(code)+'"><b>'+code+'</b><span class="pc-ref">'+lbl+'</span></div>';
+    }).join(''); } }
 function matStockOptions(){ const list=matEnStock(); return list.length?list.map(function(m){return '<option value="'+esc(m.Ref)+'">'+esc(m.Ref)+(m.Designation?(' — '+esc(m.Designation)):'')+'</option>';}).join(''):''; }
 function layoutOpen(code){ const admin=isAdminUser(); const p=pistoOf(code)||{Code:code}; const cur=posteCurrent(code); const panel=document.getElementById('layoutPanel'); panel.style.display='block';
   const opts=matStockOptions();
@@ -5154,8 +5169,8 @@ function layoutOpen(code){ const admin=isAdminUser(); const p=pistoOf(code)||{Co
   if(!opts){ html+='<div class="empty">Aucun pistolet « En stock ». Ajoute-les dans Stock ▸ Matériel.</div>'; }
   else { html+='<div class="grid g3">'
      +'<div class="field"><label>Pistolet (en stock)</label><select id="plNewRef">'+opts+'</select></div>'
-     +'<div class="field"><label>Ancien pistolet →</label><select id="plMotifOld"><option>En stock</option><option>En panne</option></select></div>'
-     +'<div class="field"><label>Commentaire</label><input id="plCom" placeholder="remarque (option.)"></div></div>'
+     +'<div class="field"><label>Motif (l\'ancien part en)</label><select id="plMotifOld"><option value="En stock">Juste changement → En stock</option><option value="En panne">En panne → à réparer</option></select></div>'
+     +'<div class="field"><label>Commentaire</label><input id="plCom" placeholder="pourquoi le changement"></div></div>'
      +(admin?'<button class="btn" style="margin-top:8px" onclick="layoutAssign(\''+code+'\')">Affecter maintenant</button>'
             :'<button class="btn" style="margin-top:8px" onclick="layoutReq(\''+code+'\')">Envoyer pour validation du manager</button>'); }
   panel.innerHTML=html; panel.scrollIntoView({behavior:'smooth',block:'nearest'}); }
