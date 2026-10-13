@@ -1534,7 +1534,7 @@ tr.alert td{background:var(--danger-soft)}
   </section>
 </main>
 
-<div class="foot">Valorise — outil interne · <b>version 11.2-SUPABASE · 03-01 · Layout responsive mobile + liste postes cliquable</b> · <span id="userTag2"></span></div>
+<div class="foot">Valorise — outil interne · <b>version 11.3-SUPABASE · 03-01 · changement pistolet : chef+shift auto + historique automatique</b> · <span id="userTag2"></span></div>
 </div><!-- /appWrap -->
 <div class="toast" id="toast"></div>
 
@@ -1704,7 +1704,7 @@ async function route(action,p){
     case 'deleteAchat':    if(p.id) await db.collection('achats').doc(String(p.id)).delete(); return {ok:true};
     case 'getPistolets':   { const s=await db.collection('pistolets').get(); return {ok:true, rows:s.docs.map(function(d){return Object.assign({Code:d.id},d.data());})}; }
     case 'savePistolet':   { const id=String(p.rec.Code); await db.collection('pistolets').doc(id).set(Object.assign({},p.rec,{Code:id})); return {ok:true,id:id}; }
-    case 'reqPistolet':    { const id=String(p.code); const d=await db.collection('pistolets').doc(id).get(); const cur=d.exists?d.data():{Code:id}; cur.pending={newRef:p.newRef||'',motifOld:p.motifOld||'En stock',commentaire:p.commentaire||'',by:p.by||'',date:todayStr(),statut:'En attente'}; await db.collection('pistolets').doc(id).set(Object.assign({Code:id},cur)); return {ok:true}; }
+    case 'reqPistolet':    { const id=String(p.code); const d=await db.collection('pistolets').doc(id).get(); const cur=d.exists?d.data():{Code:id}; cur.pending={newRef:p.newRef||'',motifOld:p.motifOld||'En stock',commentaire:p.commentaire||'',by:p.by||'',shift:p.shift||'',equipe:p.equipe||'',date:todayStr(),statut:'En attente'}; await db.collection('pistolets').doc(id).set(Object.assign({Code:id},cur)); return {ok:true}; }
     case 'validPistolet':  {
       const code=String(p.code);
       const pd=await db.collection('pistolets').doc(code).get(); const pend=pd.exists?(pd.data().pending||null):null;
@@ -1713,10 +1713,10 @@ async function route(action,p){
       const all=await db.collection('materiel').get(); const mats=all.docs.map(function(d){return d.data();});
       const olds=mats.filter(function(m){return m.Poste===code && m.Etat==='Affecté';});
       for(var i=0;i<olds.length;i++){ var o=olds[i]; o.Etat=pend.motifOld||'En stock'; o.Poste=''; o.Commentaire=pend.commentaire||o.Commentaire||'';
-        o.histo=(o.histo||[]).concat([{date:todayStr(),action:'Retiré de '+code,etat:o.Etat,motif:pend.motifOld||'',commentaire:pend.commentaire||'',by:pend.by||''}]);
+        o.histo=(o.histo||[]).concat([{date:todayStr(),action:'Retiré de '+code,poste:code,etat:o.Etat,motif:pend.motifOld||'',commentaire:pend.commentaire||'',by:pend.by||'',shift:pend.shift||''}]);
         await db.collection('materiel').doc(String(o.Ref)).set(o); }
       if(pend.newRef){ const nd=await db.collection('materiel').doc(String(pend.newRef)).get(); const nm=nd.exists?nd.data():{Ref:String(pend.newRef),Designation:'Pistolet'};
-        nm.Etat='Affecté'; nm.Poste=code; nm.histo=(nm.histo||[]).concat([{date:todayStr(),action:'Affecté à '+code,etat:'Affecté',by:pend.by||''}]);
+        nm.Etat='Affecté'; nm.Poste=code; nm.histo=(nm.histo||[]).concat([{date:todayStr(),action:'Affecté à '+code,poste:code,etat:'Affecté',commentaire:pend.commentaire||'',by:pend.by||'',shift:pend.shift||''}]);
         await db.collection('materiel').doc(String(pend.newRef)).set(nm); }
       await db.collection('pistolets').doc(code).set({Code:code,pending:null}); return {ok:true}; }
     case 'getMateriel':    { const s=await db.collection('materiel').get(); return {ok:true, rows:s.docs.map(function(d){return Object.assign({Ref:d.id},d.data());})}; }
@@ -5167,16 +5167,24 @@ function layoutOpen(code){ const admin=isAdminUser(); const p=pistoOf(code)||{Co
      +(admin?'<div style="margin-top:8px"><button class="btn sm" onclick="layoutValidate(\''+code+'\',true)">Valider</button> <button class="btn sm ghost" onclick="layoutValidate(\''+code+'\',false)">Refuser</button></div>':'')+'</div>'; }
   html+='<h4 style="margin:10px 0 6px">'+(admin?'Affecter / changer le pistolet':'Demander un changement')+'</h4>';
   if(!opts){ html+='<div class="empty">Aucun pistolet « En stock ». Ajoute-les dans Stock ▸ Matériel.</div>'; }
-  else { html+='<div class="grid g3">'
+  else { if(!admin){ const list=(typeof chefsOfWeek==='function')?chefsOfWeek():[];
+      html+='<div class="grid g2"><div class="field"><label>Chef d\'équipe</label><select id="plChef" onchange="layoutShiftUpd()"><option value="">— ton nom —</option>'
+        +list.map(function(c){return '<option value="'+esc(chefKey(c))+'">'+esc(c.chef)+'</option>';}).join('')+'</select></div>'
+        +'<div class="field"><label>Shift (auto)</label><input id="plShift" readonly placeholder="auto"></div></div>'; }
+    html+='<div class="grid g3">'
      +'<div class="field"><label>Pistolet (en stock)</label><select id="plNewRef">'+opts+'</select></div>'
      +'<div class="field"><label>Motif (l\'ancien part en)</label><select id="plMotifOld"><option value="En stock">Juste changement → En stock</option><option value="En panne">En panne → à réparer</option></select></div>'
      +'<div class="field"><label>Commentaire</label><input id="plCom" placeholder="pourquoi le changement"></div></div>'
      +(admin?'<button class="btn" style="margin-top:8px" onclick="layoutAssign(\''+code+'\')">Affecter maintenant</button>'
             :'<button class="btn" style="margin-top:8px" onclick="layoutReq(\''+code+'\')">Envoyer pour validation du manager</button>'); }
   panel.innerHTML=html; panel.scrollIntoView({behavior:'smooth',block:'nearest'}); }
+function layoutShiftUpd(){ const sel=document.getElementById('plChef'); const sh=document.getElementById('plShift'); if(!sel||!sh)return; const m=metaOfChef(sel.value); sh.value=m?shiftLabel(m.shift):''; }
 function layoutReqParams(code){ const nr=document.getElementById('plNewRef'); return {code:code, newRef:nr?nr.value:'', motifOld:(document.getElementById('plMotifOld')||{}).value||'En stock', commentaire:(document.getElementById('plCom')||{}).value||''}; }
 function layoutReq(code){ const q=layoutReqParams(code); if(!q.newRef){ toast('Choisis un pistolet en stock','err'); return; }
-  api('reqPistolet',{password:ADMIN_PWD,code:q.code,newRef:q.newRef,motifOld:q.motifOld,commentaire:q.commentaire,by:'Team Leader'}).then(function(){ toast('Demande envoyée au manager ✔','ok'); initLayout(); }).catch(function(e){toast(e.message,'err');}); }
+  const chefSel=document.getElementById('plChef'); const m=chefSel?metaOfChef(chefSel.value):null;
+  if(!m){ toast('Choisis ton nom (chef d\'équipe)','err'); return; }
+  const by=m.chef+' · '+shiftLabel(m.shift);
+  api('reqPistolet',{password:ADMIN_PWD,code:q.code,newRef:q.newRef,motifOld:q.motifOld,commentaire:q.commentaire,by:by,shift:m.shift,equipe:m.equipe}).then(function(){ toast('Demande envoyée au manager ✔','ok'); initLayout(); }).catch(function(e){toast(e.message,'err');}); }
 function layoutAssign(code){ const q=layoutReqParams(code); if(!q.newRef){ toast('Choisis un pistolet en stock','err'); return; }
   api('reqPistolet',{password:ADMIN_PWD,code:q.code,newRef:q.newRef,motifOld:q.motifOld,commentaire:q.commentaire,by:'Admin'})
    .then(function(){ return api('validPistolet',{password:ADMIN_PWD,code:code,ok:true}); })
@@ -5188,6 +5196,13 @@ function renderPistoHisto(){ const el=document.getElementById('pistoHisto'); if(
   h+='<div class="tbl-wrap"><table><thead><tr><th>Poste</th><th>Pistolet affecté</th><th>Mise en marche</th><th>Statut</th></tr></thead><tbody>'
     +Object.keys(POSTE_COORDS).map(function(code){ const p=pistoOf(code)||{}; const cur=posteCurrent(code); const st=p.pending?'<span style="color:#c98a3a;font-weight:700">Changement en attente</span>':(cur?'<span style="color:#2e7d55">Affecté</span>':'<span style="color:#999">Vide</span>');
       return '<tr><td><b>'+code+'</b></td><td>'+(cur?esc(cur.Ref):'—')+'</td><td>'+(cur&&cur.DateMiseEnMarche?esc(cur.DateMiseEnMarche):'—')+'</td><td>'+st+'</td></tr>'; }).join('')+'</tbody></table></div>';
+  // historique automatique de tous les changements
+  const changes=[]; MAT.forEach(function(m){ (m.histo||[]).forEach(function(x){ if((x.action||'').indexOf('Affecté à')===0||(x.action||'').indexOf('Retiré de')===0) changes.push(Object.assign({ref:m.Ref},x)); }); });
+  changes.sort(function(a,b){ return (a.date<b.date?1:-1); });
+  h+='<h4 style="margin:14px 0 6px">Historique des changements</h4>';
+  h+=changes.length?'<div class="tbl-wrap"><table><thead><tr><th>Date</th><th>Poste</th><th>Pistolet</th><th>Action</th><th>Motif</th><th>Chef · shift</th></tr></thead><tbody>'
+    +changes.slice(0,150).map(function(c){ return '<tr><td>'+esc(c.date||'')+'</td><td>'+esc(c.poste||'')+'</td><td><b>'+esc(c.ref||'')+'</b></td><td>'+esc(c.action||'')+'</td><td>'+esc(c.motif||c.commentaire||'')+'</td><td>'+esc(c.by||'')+'</td></tr>'; }).join('')+'</tbody></table></div>'
+    :'<div class="empty">Aucun changement enregistré.</div>';
   el.innerHTML=h; }
 
 /* ================= STOCK MATÉRIEL (pistolets) ================= */
