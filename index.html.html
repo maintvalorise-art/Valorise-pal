@@ -571,7 +571,11 @@ tr.alert td{background:var(--danger-soft)}
           <div class="field" style="align-self:end"><button class="btn ghost" onclick="loadPlanningWeek()">Charger</button></div>
         </div>
         <div id="plGrid"></div>
-        <button class="btn" onclick="savePlanning()">Enregistrer le planning</button>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+          <button class="btn" onclick="savePlanning()">Enregistrer le planning</button>
+          <button class="btn ghost sm" onclick="planExcel()">Excel</button>
+          <button class="btn ghost sm" onclick="planPdf()">PDF</button>
+        </div>
       </div>
 
       <div class="card">
@@ -585,7 +589,11 @@ tr.alert td{background:var(--danger-soft)}
         </div>
         <div class="row-actions" style="margin-bottom:10px"><button class="btn pine" onclick="bulkAssign()">Basculer</button></div>
         <div id="afTable"></div>
-        <button class="btn" style="margin-top:12px" onclick="saveAffectation()">Enregistrer l'affectation</button>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
+          <button class="btn" onclick="saveAffectation()">Enregistrer l'affectation</button>
+          <button class="btn ghost sm" onclick="affExcel()">Excel</button>
+          <button class="btn ghost sm" onclick="affPdf()">PDF</button>
+        </div>
       </div>
     </div>
   </section>
@@ -1534,7 +1542,7 @@ tr.alert td{background:var(--danger-soft)}
   </section>
 </main>
 
-<div class="foot">Valorise — outil interne · <b>version 11.3-SUPABASE · 03-01 · changement pistolet : chef+shift auto + historique automatique</b> · <span id="userTag2"></span></div>
+<div class="foot">Valorise — outil interne · <b>version 11.4-SUPABASE · 03-01 · Affectation & Planning : export Excel + PDF</b> · <span id="userTag2"></span></div>
 </div><!-- /appWrap -->
 <div class="toast" id="toast"></div>
 
@@ -2610,6 +2618,28 @@ function savePlanning(){
     toast('Planning enregistré ✔','ok');
   }).catch(function(err){toast(err.message,'err');});
 }
+/* --- Exports Affectation & Planning --- */
+function planGather(){ const rows=[]; document.querySelectorAll('.plChef').forEach(function(s){ const eq=s.dataset.eq; const sh=document.querySelector('.plShift[data-eq="'+eq+'"]');
+  rows.push({Equipe:eqLabel(eq), Chef:s.value||'', Shift:sh&&sh.value?shiftLabel(sh.value):''}); }); return rows; }
+function planWk(){ return 'S'+(document.getElementById('plSemaine').value||'')+' · '+(document.getElementById('plAnnee').value||''); }
+function planExcel(){ const r=planGather(); if(!r.length){toast('Charge d\'abord la semaine','err');return;}
+  exportExcel(r,'Planning','Planning_'+planWk().replace(/[^0-9A-Za-z]/g,'_')+'.xlsx'); }
+function planPdf(){ const r=planGather(); if(!r.length){toast('Charge d\'abord la semaine','err');return;} const J=window.jspdf; if(!J||!J.jsPDF){toast('PDF indisponible','err');return;}
+  const doc=new J.jsPDF({unit:'mm',format:'a4'}); doc.setFillColor(22,74,52); doc.rect(0,0,210,18,'F'); doc.setTextColor(255); doc.setFont(undefined,'bold'); doc.setFontSize(15); doc.text('VALORISE — Planning de la semaine',14,12);
+  doc.setTextColor(25); doc.setFont(undefined,'normal'); doc.setFontSize(10); doc.text('Semaine : '+planWk(),14,26);
+  doc.autoTable({startY:31,head:[['Équipe','Chef d\'équipe','Shift']],body:r.map(function(x){return [x.Equipe,x.Chef,x.Shift];}),styles:{fontSize:9},headStyles:{fillColor:[46,125,85]}});
+  doc.setFontSize(8); doc.setTextColor(120); doc.text('Valorise Maroc · Zone Franche Tanger · MA-3403 HT',14,290);
+  doc.save('Planning_'+planWk().replace(/[^0-9A-Za-z]/g,'_')+'.pdf'); }
+function affGather(){ return [].map.call(document.querySelectorAll('#afTable tr[data-id]'),function(tr){ const dep=tr.querySelector('.afDep'),eq=tr.querySelector('.afEq'),pos=tr.querySelector('.afPos');
+  const e=S.emp.find(function(x){return String(x.ID)===tr.dataset.id;})||{};
+  return {ID:tr.dataset.id, Nom:e.Nom||'', Departement:dep?dep.value:'', Equipe:eq&&eq.value?eqLabel(eq.value):'', Poste:pos?pos.value:''}; }); }
+function affExcel(){ const r=affGather(); if(!r.length){toast('Rien à exporter','err');return;} exportExcel(r,'Affectation','Affectation.xlsx'); }
+function affPdf(){ const r=affGather(); if(!r.length){toast('Rien à exporter','err');return;} const J=window.jspdf; if(!J||!J.jsPDF){toast('PDF indisponible','err');return;}
+  const doc=new J.jsPDF({unit:'mm',format:'a4'}); doc.setFillColor(22,74,52); doc.rect(0,0,210,18,'F'); doc.setTextColor(255); doc.setFont(undefined,'bold'); doc.setFontSize(15); doc.text('VALORISE — Affectation équipes',14,12);
+  doc.setTextColor(25); doc.setFont(undefined,'normal'); doc.setFontSize(9); doc.text('Édité le '+new Date().toISOString().slice(0,10)+'  ·  Effectif : '+r.length,14,26);
+  doc.autoTable({startY:31,head:[['ID','Nom','Département','Équipe','Poste']],body:r.map(function(x){return [x.ID,x.Nom,x.Departement,x.Equipe,x.Poste];}),styles:{fontSize:8},headStyles:{fillColor:[46,125,85]}});
+  doc.setFontSize(8); doc.setTextColor(120); doc.text('Valorise Maroc · Zone Franche Tanger · MA-3403 HT',14,290);
+  doc.save('Affectation.pdf'); }
 
 /* ================= ARTICLES ================= */
 function artDoublons(){ const box=document.getElementById('artTools');
