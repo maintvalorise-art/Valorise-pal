@@ -1025,7 +1025,7 @@ tr.alert td{background:var(--danger-soft)}
       <button class="btn" onclick="document.getElementById('z2File').click()">⬆ Importer le fichier tickets</button>
       <input type="file" id="z2File" accept=".xls,.xlsx" style="display:none" onchange="z2Import(this.files[0])">
       <div id="z2ImpInfo" style="margin-top:10px"></div>
-      <div class="warnbox" style="margin-top:10px"><b>Logique :</b> Client « VALORISE MAROC » → <b>Livraison</b> (sortie stock). Autre société → <b>Réception</b> (entrée stock). Désignation vide → <b>Pesage</b> (prestation, hors stock). Poids net agrégé par jour/article.</div>
+      <div class="warnbox" style="margin-top:10px"><b>V02 uniquement</b> — on importe seulement <b>bois / métal / pallet / aluminium / ferraille</b> (le reste : carton, plastique… est ignoré). Client « VALORISE MAROC » → <b>Livraison</b> (sortie). Autre société → <b>Réception</b> (entrée). Poids net agrégé par jour/article. Le fichier peut être .xls (mizan) ou .xlsx.</div>
       <button class="btn ghost sm" style="margin-top:10px" onclick="z2DelAll('')">🗑 Effacer TOUTES les données Zone 2 (avant réimport)</button>
     </div>
   </section>
@@ -1542,7 +1542,7 @@ tr.alert td{background:var(--danger-soft)}
   </section>
 </main>
 
-<div class="foot">Valorise — outil interne · <b>version 11.4-SUPABASE · 03-01 · Affectation & Planning : export Excel + PDF</b> · <span id="userTag2"></span></div>
+<div class="foot">Valorise — outil interne · <b>version 11.5-SUPABASE · 03-01 · Zone 2 : import mizan filtré V02 (bois/métal/pallet/alu/ferraille)</b> · <span id="userTag2"></span></div>
 </div><!-- /appWrap -->
 <div class="toast" id="toast"></div>
 
@@ -3271,28 +3271,38 @@ function z2DelArt(ref){ if(!confirm('Supprimer '+ref+' ?'))return; api('deleteZ2
 function z2RenderArt(){ document.getElementById('z2artBody').innerHTML= Z2_ART.length? '<div class="tbl-wrap"><table><thead><tr><th>Référence</th><th>Unité</th><th></th></tr></thead><tbody>'
     +Z2_ART.map(function(a){return '<tr><td><b>'+esc(a.Ref)+'</b></td><td>'+esc(a.Unite||'kg')+'</td><td><button class="btn link" onclick="z2DelArt(\''+esc(a.Ref)+'\')">✕</button></td></tr>';}).join('')+'</tbody></table></div>'
     : '<div class="empty">Aucun article. Les articles apparaissent aussi automatiquement à l\'import.</div>'; }
+/* V02 = bois / métal / pallet / aluminium / ferraille UNIQUEMENT.
+   On garde une ligne seulement si elle contient un mot-clé V02 ET aucun autre matériau (carton/plastique/…). */
+const Z2_V02=['BOIS','PALET','PLANCHE','TACON','COUVERCLE','FERAILLE','FERRAILLE','ALUMINI','ALIMINI','ALOMINI','ALUMINIOM','ACIER','CUIVRE','INOX','ZINC','COPEAU','COUPEAU','METALIQ','METALLIQ','METALIK','CABLE','EURO'];
+const Z2_OTHER=['CARTON','PAPIER','PLASTIQ','PVC','PELD','PEHD','POM','PA6','PMMA','CAOUTCHOU','CAUCHO','MOUSSE','TEXTIL','TISSU','CHIFON','CHIFFON','DRILLE','GORGE','PURGE','CAROTTE','RAPHIA','SELOFAN','SOULEFANE','GOMA','PNEU','MOQUET','VERRE','HUILE','PEINTURE','CHIMIQUE','CHEMIQUE','SOLVANT','DANGEREU','TOXIQUE','BOUE','VETEMENT','POLYSTREN','GRANUL','FILM','REBABA','BANAL','DNV','IRRECUP','NON VALORISABLE','ORGANIQUE','FIBRE','COLLE','AEROSOL','BARIL','PP ','PE ','PS ','ABS','PVB','BIG BAG'];
+function z2IsV02(des){ const d=' '+norm(des).toUpperCase()+' '; if(!des)return false;
+  const hasV=Z2_V02.some(function(k){return d.indexOf(k)>=0;}) || /\bFER\b/.test(d);
+  if(!hasV) return false;
+  const hasO=Z2_OTHER.some(function(k){return d.indexOf(k)>=0;});
+  return !hasO; }
 function z2Import(file){ if(!file)return; toast('Lecture du fichier…','ok');
   const rd=new FileReader(); rd.onload=function(e){ try{
     const wb=XLSX.read(new Uint8Array(e.target.result),{type:'array',cellDates:true});
     const ws=wb.Sheets[wb.SheetNames[0]]; const rs=XLSX.utils.sheet_to_json(ws,{defval:''});
-    const agg={}; let nTk=0, nPes=0;
+    const agg={}; let nTk=0, nSkip=0;
     rs.forEach(function(r){ const client=String(z2gv(r,['nom client','client'])||'');
+      const dest=String(z2gv(r,['nom destination','destination'])||'').trim();
       const ref=String(z2gv(r,['designation produit','designation','produit'])||'').trim();
       const qte=Number(z2gv(r,['poids net','poids net kg','net'])||0);
       const date=fmtDate(z2gv(r,['date entree','date'])); if(!qte||!date) return;
-      let sens;
-      if(!ref){ sens='PESAGE'; nPes++; } else { sens=/valorise/i.test(client)?'OUT':'IN'; }
+      if(!z2IsV02(ref)){ nSkip++; return; } /* on ne garde que V02 */
+      const sens=/valorise/i.test(client)?'OUT':'IN';
       nTk++;
-      const rk=(ref||'PESAGE').replace(/[^\w]+/g,'_').slice(0,40);
-      const key=sens+'|'+date+'|'+(ref||client); const id='ZA-'+(sens==='IN'?'R':(sens==='OUT'?'L':'P'))+'-'+date+'-'+(rk||'x')+'-'+String(client).replace(/[^\w]+/g,'_').slice(0,20);
-      if(!agg[key]) agg[key]={_id:id, id:id, Sens:sens, Date:date, Ref:ref||'', Designation:ref||'Prestation pesage', Qte:0, Unite:'kg', Source:'IMPORT', Client:client, nTickets:0};
+      const rk=ref.replace(/[^\w]+/g,'_').slice(0,40);
+      const key=sens+'|'+date+'|'+ref; const id='ZA-'+(sens==='IN'?'R':'L')+'-'+date+'-'+(rk||'x')+'-'+String(client).replace(/[^\w]+/g,'_').slice(0,20);
+      if(!agg[key]) agg[key]={_id:id, id:id, Plant:'V02', Sens:sens, Date:date, Ref:ref, Designation:ref, Qte:0, Unite:'kg', Source:'IMPORT', Client:client, Destination:dest, nTickets:0};
       agg[key].Qte+=qte; agg[key].nTickets++;
     });
     const docs=Object.keys(agg).map(function(k){ agg[k].Qte=Math.round(agg[k].Qte); return agg[k]; });
-    if(!docs.length){ toast('Aucun ticket lisible','err'); document.getElementById('z2ImpInfo').innerHTML='<div class="warnbox">Colonnes non reconnues.</div>'; return; }
-    const nIn=docs.filter(function(d){return d.Sens==='IN';}).length, nOut=docs.filter(function(d){return d.Sens==='OUT';}).length, nP=docs.filter(function(d){return d.Sens==='PESAGE';}).length;
-    document.getElementById('z2ImpInfo').innerHTML='<div class="info">'+nTk+' tickets → '+docs.length+' lignes (Réception '+nIn+' · Livraison '+nOut+' · Pesage '+nP+'). Import en cours…</div>';
-    api('importZ2',{docs:docs}).then(function(r){ document.getElementById('z2ImpInfo').innerHTML='<div class="info">✔ '+r.n+' lignes importées — Réception '+nIn+', Livraison '+nOut+', Pesage '+nP+' (hors stock)</div>'; toast(r.n+' lignes ✔','ok'); z2LoadAll(function(){z2Stock();},true); }).catch(function(err){ toast('Erreur : '+err.message,'err'); });
+    if(!docs.length){ toast('Aucune ligne V02','err'); document.getElementById('z2ImpInfo').innerHTML='<div class="warnbox">Aucune ligne V02 (bois/métal/pallet/alu/ferraille) trouvée — colonnes non reconnues ?</div>'; return; }
+    const nIn=docs.filter(function(d){return d.Sens==='IN';}).length, nOut=docs.filter(function(d){return d.Sens==='OUT';}).length;
+    document.getElementById('z2ImpInfo').innerHTML='<div class="info">'+nTk+' tickets V02 → '+docs.length+' lignes (Réception '+nIn+' · Livraison '+nOut+') · '+nSkip+' lignes hors V02 ignorées. Import en cours…</div>';
+    api('importZ2',{docs:docs}).then(function(r){ document.getElementById('z2ImpInfo').innerHTML='<div class="info">✔ '+r.n+' lignes V02 importées — Réception '+nIn+', Livraison '+nOut+' ('+nSkip+' hors V02 ignorées)</div>'; toast(r.n+' lignes V02 ✔','ok'); z2LoadAll(function(){z2Stock();},true); }).catch(function(err){ toast('Erreur : '+err.message,'err'); });
   }catch(err){ toast('Fichier illisible : '+err.message,'err'); } };
   rd.readAsArrayBuffer(file);
 }
