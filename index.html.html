@@ -195,10 +195,20 @@ tr.alert td{background:var(--danger-soft)}
 .poste-chip b{font-size:13px}
 .poste-chip .pc-ref{color:var(--muted,#777);font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
 @media(max-width:720px){ .pisto-pt{width:20px;height:20px;font-size:9px;border-width:1.5px} }
-.plan-wrap{position:relative;width:100%;padding-bottom:66%;border:1px solid var(--line,#ccc);border-radius:10px;background:#f4f5f3;overflow:hidden;touch-action:none}
+.plan-wrap{position:relative;width:100%;padding-bottom:62%;border:1px solid var(--line,#ccc);border-radius:10px;background:#fbfcfb;overflow:hidden;touch-action:none}
+.plan-wrap.grid{background-image:linear-gradient(#e7ece7 1px,transparent 1px),linear-gradient(90deg,#e7ece7 1px,transparent 1px);background-size:4% 6.45%}
+.plan-wrap.bg{background-size:100% 100%;background-repeat:no-repeat}
 .plan-canvas{position:absolute;inset:0}
-.plan-el{box-sizing:border-box;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;border-radius:5px;cursor:move;overflow:hidden;text-align:center;padding:2px;line-height:1.05;box-shadow:0 1px 3px rgba(0,0,0,.25)}
-.plan-rz{position:absolute;right:-7px;bottom:-7px;width:16px;height:16px;background:#c98a3a;border:2px solid #fff;border-radius:3px;cursor:nwse-resize}
+.plan-el{position:absolute;box-sizing:border-box;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff;border-radius:5px;cursor:move;overflow:hidden;text-align:center;padding:2px;line-height:1.05;box-shadow:0 1px 4px rgba(0,0,0,.28);user-select:none}
+.plan-el.sel{outline:3px solid #c98a3a;outline-offset:1px;z-index:30}
+.plan-rz{position:absolute;right:-8px;bottom:-8px;width:16px;height:16px;background:#fff;border:2px solid #c98a3a;border-radius:3px;cursor:nwse-resize}
+.plan-palette{display:flex;flex-wrap:wrap;gap:6px}
+.plan-palette button{border:1px solid var(--line,#ccc);background:#fff;border-radius:8px;padding:6px 10px;font-size:12px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px}
+.plan-sw{width:12px;height:12px;border-radius:3px;display:inline-block;border:1px solid rgba(0,0,0,.15)}
+.plan-legend{display:flex;flex-wrap:wrap;gap:12px;font-size:11px;color:var(--muted,#666);margin-top:8px}
+.plan-legend span{display:flex;align-items:center;gap:5px}
+.plan-colors{display:flex;flex-wrap:wrap;gap:5px}
+.plan-colors b{width:20px;height:20px;border-radius:4px;cursor:pointer;border:2px solid #fff;box-shadow:0 0 0 1px rgba(0,0,0,.15)}
 .xbtn{background:var(--danger-soft);color:var(--danger);border:none;border-radius:8px;height:40px;font-size:18px;cursor:pointer}
 .addline{background:none;border:1px dashed var(--green2);color:var(--green2);padding:8px;border-radius:8px;width:100%;font-weight:600;cursor:pointer;font-size:13.5px}
 .addline:hover{background:var(--green-soft)}
@@ -1496,17 +1506,20 @@ tr.alert td{background:var(--danger-soft)}
       <p>Ajoute, déplace, redimensionne ou supprime les machines, zones, scrap… Glisse un bloc pour le bouger, tire le coin doré pour le redimensionner.</p></div>
     <div class="admin-body" data-admin="layoutedit">
       <div class="card">
-        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:end;margin-bottom:10px">
-          <div class="field" style="min-width:150px"><label>Type d'élément</label>
-            <select id="plType"><option value="machine">Machine</option><option value="poste">Poste</option><option value="scrap">Scrap</option><option value="stock">Stock</option><option value="zone">Zone</option><option value="bureau">Bureau</option><option value="entree">Entrée</option><option value="texte">Texte</option></select></div>
-          <button class="btn" onclick="planAdd()">+ Ajouter</button>
+        <div class="plan-palette" id="planPalette"></div>
+        <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;margin:10px 0">
+          <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer"><input type="checkbox" id="plGridChk" checked onchange="planRender()"> Grille</label>
+          <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer"><input type="checkbox" id="plSnapChk" checked> Aimanter</label>
           <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer"><input type="checkbox" id="plBg" onchange="planRender()"> Fond : plan original</label>
-          <button class="btn ghost sm" onclick="planSeed()">Pré-remplir zones</button>
+          <div style="flex:1"></div>
+          <button class="btn ghost sm" onclick="planSeed()">Pré-remplir</button>
           <button class="btn ghost sm" onclick="planClear()">Vider</button>
-          <button class="btn pine" onclick="planSave()">💾 Enregistrer le plan</button>
+          <button class="btn pine" onclick="planSave()">💾 Enregistrer</button>
         </div>
-        <div class="plan-wrap" id="planWrap"><div class="plan-canvas" id="planCanvas"></div></div>
+        <div class="plan-wrap grid" id="planWrap"><div class="plan-canvas" id="planCanvas"></div></div>
+        <div class="plan-legend" id="planLegend"></div>
         <div id="planPanel" style="margin-top:10px"></div>
+        <p style="color:var(--muted);font-size:12px;margin-top:6px">Clique un outil en haut pour l'ajouter · glisse un bloc pour le déplacer · coin doré = redimensionner · touche <b>Suppr</b> = effacer, flèches = déplacer finement.</p>
       </div>
     </div>
   </section>
@@ -1567,7 +1580,7 @@ tr.alert td{background:var(--danger-soft)}
   </section>
 </main>
 
-<div class="foot">Valorise — outil interne · <b>version 11.6-SUPABASE · 03-01 · Éditeur de plan interactif (machines/zones/scrap déplaçables)</b> · <span id="userTag2"></span></div>
+<div class="foot">Valorise — outil interne · <b>version 11.7-SUPABASE · 03-01 · Éditeur de plan amélioré (palette, grille/snap, rotation, calques, clavier)</b> · <span id="userTag2"></span></div>
 </div><!-- /appWrap -->
 <div class="toast" id="toast"></div>
 
@@ -5300,47 +5313,89 @@ function mtExcel(){ if(!MAT.length){toast('Rien à exporter','err');return;} exp
 
 /* ================= ÉDITEUR DE PLAN INTERACTIF ================= */
 let PLAN={elements:[]}, PLAN_SEL=null;
-const PLAN_TYPES={ machine:{label:'Machine',color:'#3b5569'}, poste:{label:'Poste',color:'#2e7d55'}, scrap:{label:'Scrap',color:'#c0612a'}, stock:{label:'Stock',color:'#7a5230'}, zone:{label:'Zone',color:'#9aa89a'}, bureau:{label:'Bureau',color:'#555f6b'}, entree:{label:'Entrée',color:'#b02a2a'}, texte:{label:'Texte',color:'transparent'} };
-function initPlanEditor(){ api('getLayoutPlan',{}).then(function(r){ PLAN=(r.data&&r.data.elements)?r.data:{elements:[]}; PLAN_SEL=null; planRender(); planSelPanel(); }).catch(function(){ PLAN={elements:[]}; planRender(); }); }
+const PLAN_TYPES={
+  machine:{label:'Machine',color:'#3b5569',w:16,h:10},
+  poste:{label:'Poste',color:'#2e7d55',w:10,h:7},
+  stock:{label:'Stock',color:'#7a5230',w:18,h:12},
+  scrap:{label:'Scrap',color:'#c0612a',w:14,h:10},
+  zone:{label:'Zone',color:'#9aa89a',w:28,h:22},
+  bureau:{label:'Bureau',color:'#556070',w:12,h:9},
+  mur:{label:'Mur',color:'#2b2b2b',w:26,h:2},
+  porte:{label:'Porte',color:'#c98a3a',w:7,h:2},
+  entree:{label:'Entrée',color:'#b02a2a',w:8,h:5},
+  texte:{label:'Texte',color:'transparent',w:16,h:6}
+};
+const PLAN_PALETTE_COLORS=['#3b5569','#2e7d55','#7a5230','#c0612a','#9aa89a','#556070','#2b2b2b','#c98a3a','#b02a2a','#1f6f8b','#6b4e9e'];
 function planUID(){ return 'E'+Date.now().toString(36)+Math.floor(Math.random()*999).toString(36); }
-function planAdd(){ const t=document.getElementById('plType').value; const td=PLAN_TYPES[t]||PLAN_TYPES.machine;
-  const e={id:planUID(), type:t, label:td.label, x:42, y:42, w:(t==='texte'?14:16), h:(t==='texte'?6:9), color:td.color};
-  PLAN.elements.push(e); PLAN_SEL=e.id; planRender(); planSelPanel(); }
+function planSnapOn(){ const el=document.getElementById('plSnapChk'); return !el||el.checked; }
+function planFind(id){ return (PLAN.elements||[]).find(function(x){return x.id===id;}); }
+function planPaletteRender(){ const h=document.getElementById('planPalette'); if(!h)return;
+  h.innerHTML=Object.keys(PLAN_TYPES).map(function(k){ const t=PLAN_TYPES[k]; const sw=t.color==='transparent'?'#ccc':t.color;
+    return '<button onclick="planAdd(\''+k+'\')"><span class="plan-sw" style="background:'+sw+'"></span>'+esc(t.label)+'</button>'; }).join(''); }
+function planLegendRender(){ const h=document.getElementById('planLegend'); if(!h)return;
+  h.innerHTML=Object.keys(PLAN_TYPES).map(function(k){ const t=PLAN_TYPES[k]; const sw=t.color==='transparent'?'#ccc':t.color;
+    return '<span><span class="plan-sw" style="background:'+sw+'"></span>'+esc(t.label)+'</span>'; }).join(''); }
+function initPlanEditor(){ planPaletteRender(); planLegendRender();
+  api('getLayoutPlan',{}).then(function(r){ PLAN=(r.data&&r.data.elements)?r.data:{elements:[]}; PLAN_SEL=null; planRender(); planPanel(); }).catch(function(){ PLAN={elements:[]}; planRender(); planPanel(); }); }
+function planAdd(t){ const td=PLAN_TYPES[t]||PLAN_TYPES.machine;
+  const e={id:planUID(), type:t, label:td.label, x:40, y:40, w:td.w, h:td.h, color:td.color, rot:0};
+  PLAN.elements.push(e); PLAN_SEL=e.id; planRender(); planPanel(); }
 function planRender(){ const c=document.getElementById('planCanvas'); if(!c)return;
-  const wrap=document.getElementById('planWrap'); if(wrap){ const bg=document.getElementById('plBg'); wrap.style.backgroundImage=(bg&&bg.checked)?('url('+LAYOUT_IMG+')'):'none'; wrap.style.backgroundSize='100% 100%'; }
+  const wrap=document.getElementById('planWrap'); if(wrap){ const gridOn=(document.getElementById('plGridChk')||{}).checked; const bgOn=(document.getElementById('plBg')||{}).checked;
+    wrap.classList.toggle('grid',!!gridOn); wrap.classList.toggle('bg',!!bgOn); wrap.style.backgroundImage=bgOn?('url('+LAYOUT_IMG+')'):''; }
   c.innerHTML=(PLAN.elements||[]).map(function(e){ const sel=e.id===PLAN_SEL; const isTxt=e.type==='texte';
-    const bg=isTxt?'rgba(255,255,255,.6)':(e.color||'#3b5569'); const col=isTxt?'#1a2a1f':'#fff'; const bd=isTxt?'1px dashed #999':'none';
-    return '<div class="plan-el" data-id="'+e.id+'" style="left:'+e.x+'%;top:'+e.y+'%;width:'+e.w+'%;height:'+e.h+'%;background:'+bg+';color:'+col+';border:'+bd+';'+(sel?'outline:3px solid #c98a3a;z-index:5':'')+'">'
+    const bg=isTxt?'rgba(255,255,255,.55)':(e.color||'#3b5569'); const col=isTxt?'#1a2a1f':'#fff'; const bd=isTxt?'1px dashed #999':'none'; const rot=e.rot||0;
+    return '<div class="plan-el'+(sel?' sel':'')+'" data-id="'+e.id+'" style="left:'+e.x+'%;top:'+e.y+'%;width:'+e.w+'%;height:'+e.h+'%;background:'+bg+';color:'+col+';border:'+bd+';transform:rotate('+rot+'deg)">'
       +'<span>'+esc(e.label||'')+'</span>'+(sel?'<span class="plan-rz" data-id="'+e.id+'"></span>':'')+'</div>';
   }).join(''); }
-function planFind(id){ return (PLAN.elements||[]).find(function(x){return x.id===id;}); }
 function planDown(ev){ const rz=ev.target.closest('.plan-rz'); const elDiv=ev.target.closest('.plan-el'); if(!elDiv)return;
-  const id=elDiv.dataset.id; PLAN_SEL=id; const e=planFind(id); if(!e)return;
-  const canvas=document.getElementById('planCanvas'); const rect=canvas.getBoundingClientRect();
-  const mode=rz?'resize':'move'; const sx=ev.clientX, sy=ev.clientY, ox=e.x, oy=e.y, ow=e.w, oh=e.h; ev.preventDefault();
-  function mv(m){ const dx=(m.clientX-sx)/rect.width*100, dy=(m.clientY-sy)/rect.height*100;
-    if(mode==='move'){ e.x=Math.max(0,Math.min(100-e.w,ox+dx)); e.y=Math.max(0,Math.min(100-e.h,oy+dy)); }
-    else { e.w=Math.max(3,Math.min(100-e.x,ow+dx)); e.h=Math.max(3,Math.min(100-e.y,oh+dy)); } planRender(); }
-  function up(){ document.removeEventListener('pointermove',mv); document.removeEventListener('pointerup',up); planSelPanel(); }
-  document.addEventListener('pointermove',mv); document.addEventListener('pointerup',up); planSelPanel(); }
-function planSelPanel(){ const p=document.getElementById('planPanel'); if(!p)return; const e=planFind(PLAN_SEL);
-  if(!e){ p.innerHTML='<div style="color:var(--muted);font-size:13px">Clique un élément pour le modifier, ou ajoute-en un.</div>'; return; }
-  p.innerHTML='<div class="card" style="margin:0;padding:12px"><div class="grid g3">'
-    +'<div class="field"><label>Texte / nom</label><input id="plElLbl" value="'+esc(e.label||'')+'" oninput="planLbl(this.value)"></div>'
+  const id=elDiv.dataset.id; PLAN_SEL=id; const e=planFind(id); if(!e){return;}
+  const rect=document.getElementById('planCanvas').getBoundingClientRect();
+  const mode=rz?'resize':'move'; const sx=ev.clientX, sy=ev.clientY, ox=e.x, oy=e.y, ow=e.w, oh=e.h; ev.preventDefault(); planRender(); planPanel();
+  function mv(m){ let dx=(m.clientX-sx)/rect.width*100, dy=(m.clientY-sy)/rect.height*100;
+    if(mode==='move'){ let nx=ox+dx, ny=oy+dy; if(planSnapOn()){ nx=Math.round(nx); ny=Math.round(ny); } e.x=Math.max(0,Math.min(100-e.w,nx)); e.y=Math.max(0,Math.min(100-e.h,ny)); }
+    else { const r=(((e.rot||0)%360)+360)%360; if(r===90||r===270){ const t=dx; dx=dy; dy=t; } let nw=ow+dx, nh=oh+dy; if(planSnapOn()){ nw=Math.round(nw); nh=Math.round(nh); } e.w=Math.max(2,Math.min(100-e.x,nw)); e.h=Math.max(2,Math.min(100-e.y,nh)); }
+    planRender(); }
+  function up(){ document.removeEventListener('pointermove',mv); document.removeEventListener('pointerup',up); planPanel(); }
+  document.addEventListener('pointermove',mv); document.addEventListener('pointerup',up); }
+function planPanel(){ const p=document.getElementById('planPanel'); if(!p)return; const e=planFind(PLAN_SEL);
+  if(!e){ p.innerHTML='<div style="color:var(--muted);font-size:13px">Aucun élément sélectionné — ajoute un bloc avec les outils, ou clique un bloc existant.</div>'; return; }
+  p.innerHTML='<div class="card" style="margin:0;padding:12px">'
+    +'<div class="grid g3">'
+    +'<div class="field"><label>Texte / nom</label><input value="'+esc(e.label||'')+'" oninput="planLbl(this.value)"></div>'
     +'<div class="field"><label>Type</label><select onchange="planType(this.value)">'+Object.keys(PLAN_TYPES).map(function(k){return '<option value="'+k+'"'+(k===e.type?' selected':'')+'>'+PLAN_TYPES[k].label+'</option>';}).join('')+'</select></div>'
-    +'<div class="field" style="align-self:end;display:flex;gap:8px"><button class="btn ghost sm" onclick="planDup()">Dupliquer</button><button class="btn link" onclick="planDel()">Supprimer</button></div>'
+    +'<div class="field"><label>Couleur</label><div class="plan-colors">'+PLAN_PALETTE_COLORS.map(function(c){return '<b onclick="planColor(\''+c+'\')" style="background:'+c+'"></b>';}).join('')+'</div></div>'
+    +'</div>'
+    +'<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px">'
+    +'<button class="btn ghost sm" onclick="planRotate()">⟳ Pivoter 90°</button>'
+    +'<span style="font-size:12px;color:var(--muted)">Rotation : '+((e.rot||0))+'°</span>'
+    +'<button class="btn ghost sm" onclick="planLayer(1)">Devant</button>'
+    +'<button class="btn ghost sm" onclick="planLayer(-1)">Derrière</button>'
+    +'<button class="btn ghost sm" onclick="planDup()">Dupliquer</button>'
+    +'<button class="btn link" onclick="planDel()">Supprimer</button>'
     +'</div></div>'; }
 function planLbl(v){ const e=planFind(PLAN_SEL); if(e){ e.label=v; planRender(); } }
-function planType(t){ const e=planFind(PLAN_SEL); if(e){ e.type=t; e.color=(PLAN_TYPES[t]||{}).color; planRender(); } }
-function planDup(){ const e=planFind(PLAN_SEL); if(!e)return; const n=Object.assign({},e,{id:planUID(),x:Math.min(84,e.x+4),y:Math.min(88,e.y+4)}); PLAN.elements.push(n); PLAN_SEL=n.id; planRender(); planSelPanel(); }
-function planDel(){ if(!PLAN_SEL)return; PLAN.elements=PLAN.elements.filter(function(x){return x.id!==PLAN_SEL;}); PLAN_SEL=null; planRender(); planSelPanel(); }
-function planClear(){ if(!confirm('Vider tout le plan ?'))return; PLAN={elements:[]}; PLAN_SEL=null; planRender(); planSelPanel(); }
+function planType(t){ const e=planFind(PLAN_SEL); if(e){ e.type=t; e.color=(PLAN_TYPES[t]||{}).color; planRender(); planPanel(); } }
+function planColor(c){ const e=planFind(PLAN_SEL); if(e){ e.color=c; planRender(); } }
+function planRotate(){ const e=planFind(PLAN_SEL); if(e){ e.rot=(((e.rot||0)+90)%360); planRender(); planPanel(); } }
+function planLayer(dir){ const e=planFind(PLAN_SEL); if(!e)return; PLAN.elements=PLAN.elements.filter(function(x){return x.id!==e.id;}); if(dir>0)PLAN.elements.push(e); else PLAN.elements.unshift(e); planRender(); }
+function planDup(){ const e=planFind(PLAN_SEL); if(!e)return; const n=Object.assign({},e,{id:planUID(),x:Math.min(90,e.x+4),y:Math.min(92,e.y+4)}); PLAN.elements.push(n); PLAN_SEL=n.id; planRender(); planPanel(); }
+function planDel(){ if(!PLAN_SEL)return; PLAN.elements=PLAN.elements.filter(function(x){return x.id!==PLAN_SEL;}); PLAN_SEL=null; planRender(); planPanel(); }
+function planClear(){ if(!confirm('Vider tout le plan ?'))return; PLAN={elements:[]}; PLAN_SEL=null; planRender(); planPanel(); }
 function planSave(){ api('saveLayoutPlan',{password:ADMIN_PWD,data:PLAN}).then(function(){ toast('Plan enregistré ✔','ok'); }).catch(function(e){ toast(e.message||'Erreur','err'); }); }
 function planSeed(){ if((PLAN.elements||[]).length && !confirm('Ajouter les zones de base par-dessus l\'existant ?')) return;
-  const S0=[['zone','ZONE 01',55,22,34,42],['stock','1m wood stock',4,22,12,16],['scrap','SCRAP',4,52,12,22],['bureau','Cantine',38,22,10,16],['bureau','Atelier',38,40,10,14],['scrap','SCRAP',40,60,10,8],['stock','Stock finished + heated',62,70,24,12],['stock','Temporary stock',54,20,22,4],['zone','PORT BSL',90,22,8,52],['stock','Recycled wood stock',74,90,20,8],['entree','Entrée',6,10,7,5]];
-  S0.forEach(function(a){ PLAN.elements.push({id:planUID(),type:a[0],label:a[1],x:a[2],y:a[3],w:a[4],h:a[5],color:(PLAN_TYPES[a[0]]||{}).color}); });
+  const S0=[['zone','ZONE 01',52,20,36,44],['stock','1m wood stock',3,20,13,17],['scrap','SCRAP',3,50,13,24],['bureau','Cantine',37,20,11,17],['bureau','Atelier',37,39,11,15],['scrap','SCRAP',39,60,11,8],['stock','Stock finished + heated',60,72,26,13],['stock','Temporary stock',52,16,24,4],['zone','PORT BSL',90,20,8,54],['stock','Recycled wood stock',72,90,22,8],['entree','Entrée',5,8,8,5],['mur','',2,2,96,2]];
+  S0.forEach(function(a){ PLAN.elements.push({id:planUID(),type:a[0],label:a[1],x:a[2],y:a[3],w:a[4],h:a[5],color:(PLAN_TYPES[a[0]]||{}).color,rot:0}); });
   planRender(); toast('Zones de base ajoutées — ajuste-les','ok'); }
-(function(){ const c=document.getElementById('planCanvas'); if(c) c.addEventListener('pointerdown',planDown); })();
+(function(){ const c=document.getElementById('planCanvas'); if(c) c.addEventListener('pointerdown',planDown);
+  document.addEventListener('keydown',function(ev){ const v=document.querySelector('.view[data-view="layoutedit"]'); if(!v||!v.classList.contains('active'))return;
+    if(/^(INPUT|SELECT|TEXTAREA)$/.test((ev.target&&ev.target.tagName)||''))return; const e=planFind(PLAN_SEL); if(!e)return; const st=planSnapOn()?1:0.5;
+    if(ev.key==='Delete'||ev.key==='Backspace'){ planDel(); ev.preventDefault(); }
+    else if(ev.key==='ArrowLeft'){ e.x=Math.max(0,e.x-st); planRender(); ev.preventDefault(); }
+    else if(ev.key==='ArrowRight'){ e.x=Math.min(100-e.w,e.x+st); planRender(); ev.preventDefault(); }
+    else if(ev.key==='ArrowUp'){ e.y=Math.max(0,e.y-st); planRender(); ev.preventDefault(); }
+    else if(ev.key==='ArrowDown'){ e.y=Math.min(100-e.h,e.y+st); planRender(); ev.preventDefault(); }
+  }); })();
 
 /* ================= CERTIFICATS (absence) ================= */
 let CERTS=[];
