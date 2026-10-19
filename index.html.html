@@ -195,6 +195,10 @@ tr.alert td{background:var(--danger-soft)}
 .poste-chip b{font-size:13px}
 .poste-chip .pc-ref{color:var(--muted,#777);font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
 @media(max-width:720px){ .pisto-pt{width:20px;height:20px;font-size:9px;border-width:1.5px} }
+.plan-wrap{position:relative;width:100%;padding-bottom:66%;border:1px solid var(--line,#ccc);border-radius:10px;background:#f4f5f3;overflow:hidden;touch-action:none}
+.plan-canvas{position:absolute;inset:0}
+.plan-el{box-sizing:border-box;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;border-radius:5px;cursor:move;overflow:hidden;text-align:center;padding:2px;line-height:1.05;box-shadow:0 1px 3px rgba(0,0,0,.25)}
+.plan-rz{position:absolute;right:-7px;bottom:-7px;width:16px;height:16px;background:#c98a3a;border:2px solid #fff;border-radius:3px;cursor:nwse-resize}
 .xbtn{background:var(--danger-soft);color:var(--danger);border:none;border-radius:8px;height:40px;font-size:18px;cursor:pointer}
 .addline{background:none;border:1px dashed var(--green2);color:var(--green2);padding:8px;border-radius:8px;width:100%;font-weight:600;cursor:pointer;font-size:13.5px}
 .addline:hover{background:var(--green-soft)}
@@ -1486,6 +1490,27 @@ tr.alert td{background:var(--danger-soft)}
     <div class="card"><h3>Historique des pistolets</h3><div id="pistoHisto"></div></div>
   </section>
 
+  <!-- ============ ÉDITEUR DE PLAN (admin) ============ -->
+  <section class="view" data-view="layoutedit">
+    <div class="vhead"><div class="eyebrow">Zone 1</div><h2>Éditeur de plan interactif</h2>
+      <p>Ajoute, déplace, redimensionne ou supprime les machines, zones, scrap… Glisse un bloc pour le bouger, tire le coin doré pour le redimensionner.</p></div>
+    <div class="admin-body" data-admin="layoutedit">
+      <div class="card">
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:end;margin-bottom:10px">
+          <div class="field" style="min-width:150px"><label>Type d'élément</label>
+            <select id="plType"><option value="machine">Machine</option><option value="poste">Poste</option><option value="scrap">Scrap</option><option value="stock">Stock</option><option value="zone">Zone</option><option value="bureau">Bureau</option><option value="entree">Entrée</option><option value="texte">Texte</option></select></div>
+          <button class="btn" onclick="planAdd()">+ Ajouter</button>
+          <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer"><input type="checkbox" id="plBg" onchange="planRender()"> Fond : plan original</label>
+          <button class="btn ghost sm" onclick="planSeed()">Pré-remplir zones</button>
+          <button class="btn ghost sm" onclick="planClear()">Vider</button>
+          <button class="btn pine" onclick="planSave()">💾 Enregistrer le plan</button>
+        </div>
+        <div class="plan-wrap" id="planWrap"><div class="plan-canvas" id="planCanvas"></div></div>
+        <div id="planPanel" style="margin-top:10px"></div>
+      </div>
+    </div>
+  </section>
+
   <!-- ============ DEMANDE D'ACHAT (admin) ============ -->
   <section class="view" data-view="demachat">
     <div class="vhead"><div class="eyebrow">Achats · Valorise 2</div><h2>Demande d'achat</h2>
@@ -1542,7 +1567,7 @@ tr.alert td{background:var(--danger-soft)}
   </section>
 </main>
 
-<div class="foot">Valorise — outil interne · <b>version 11.5-SUPABASE · 03-01 · Zone 2 : import mizan filtré V02 (bois/métal/pallet/alu/ferraille)</b> · <span id="userTag2"></span></div>
+<div class="foot">Valorise — outil interne · <b>version 11.6-SUPABASE · 03-01 · Éditeur de plan interactif (machines/zones/scrap déplaçables)</b> · <span id="userTag2"></span></div>
 </div><!-- /appWrap -->
 <div class="toast" id="toast"></div>
 
@@ -1631,7 +1656,7 @@ async function sbForgot(){ const em=document.getElementById('lgEmail').value.tri
   if(!em){ msg.textContent='Saisis ton email d\'abord'; return; }
   const {error}=await SB.auth.resetPasswordForEmail(em); msg.textContent=error?('Erreur : '+error.message):'Email de réinitialisation envoyé ✔ (vérifie ta boîte)'; }
 async function sbLogout(){ await SB.auth.signOut(); location.reload(); }
-const WRITE=['saveEmploye','deleteEmploye','saveAffectation','savePlanning','saveAbsence','saveArticle','deleteArticle','saveEntree','saveSortie','saveCommande','saveOrdreProd','saveFiche','deleteFiche','savePoste','deletePoste','saveBom','deleteBom','saveQuotation','setAdminPassword','saveLivraison','savePlanLiv','setBlNext','importLivraisons','updateLivraison','deleteLivraison','clearLivraisons','deleteLivBulk','deleteFicheAbsence','saveTraitement','deleteTraitement','saveCommandesSemaine','saveZ2Mouv','deleteZ2Mouv','saveZ2Article','deleteZ2Article','importZ2','clearZ2','saveNoteTL','saveDemande','deleteDemande','saveContrat','saveInventaire','saveObjectifs','saveEcheances','saveQualite','deleteQualite','saveArticlesBulk','saveQcCtrl','saveAchat','deleteAchat','savePistolet','reqPistolet','validPistolet','saveMateriel','deleteMateriel','saveCertificat','deleteCertificat'];
+const WRITE=['saveEmploye','deleteEmploye','saveAffectation','savePlanning','saveAbsence','saveArticle','deleteArticle','saveEntree','saveSortie','saveCommande','saveOrdreProd','saveFiche','deleteFiche','savePoste','deletePoste','saveBom','deleteBom','saveQuotation','setAdminPassword','saveLivraison','savePlanLiv','setBlNext','importLivraisons','updateLivraison','deleteLivraison','clearLivraisons','deleteLivBulk','deleteFicheAbsence','saveTraitement','deleteTraitement','saveCommandesSemaine','saveZ2Mouv','deleteZ2Mouv','saveZ2Article','deleteZ2Article','importZ2','clearZ2','saveNoteTL','saveDemande','deleteDemande','saveContrat','saveInventaire','saveObjectifs','saveEcheances','saveQualite','deleteQualite','saveArticlesBulk','saveQcCtrl','saveAchat','deleteAchat','savePistolet','reqPistolet','validPistolet','saveMateriel','deleteMateriel','saveCertificat','deleteCertificat','saveLayoutPlan'];
 
 async function fb_importLivraisons(p){ const docs=p.docs||[];
   for(var i=0;i<docs.length;i+=400){ const batch=db.batch();
@@ -1733,6 +1758,8 @@ async function route(action,p){
     case 'getCertificats': { const s=await db.collection('certificats').get(); return {ok:true, rows:s.docs.map(function(d){return Object.assign({CID:d.id},d.data());})}; }
     case 'saveCertificat': { const id=(p.rec&&p.rec.CID)||uid('CERT-'); await db.collection('certificats').doc(id).set(Object.assign({},p.rec,{CID:id})); return {ok:true,id:id}; }
     case 'deleteCertificat': if(p.id) await db.collection('certificats').doc(String(p.id)).delete(); return {ok:true};
+    case 'getLayoutPlan':  { const d=await db.collection('config').doc('layoutPlan').get(); return {ok:true, data:(d.exists?d.data():null)}; }
+    case 'saveLayoutPlan': await db.collection('config').doc('layoutPlan').set(p.data||{elements:[]}); return {ok:true};
     case 'getQcCtrl':      { const d=await db.collection('config').doc('qcControleurs').get(); return {ok:true, data:(d.exists?d.data():null)}; }
     case 'saveQcCtrl':     await db.collection('config').doc('qcControleurs').set(p.data||{}); return {ok:true};
     case 'getEcheances':   { const d=await db.collection('config').doc('echeances').get(); return {ok:true, data:(d.exists?d.data():null)}; }
@@ -2004,7 +2031,7 @@ const MODULES = {
   stock: {label:'Gestion de Stock', tabs:[['stock','Stock'],['entree','Entrée stock'],['sortie','Sortie stock'],['inventaire','Inventaire'],['etatstock','État stock mensuel'],['livnew','Bon Livraison'],['livreg','Registre BL'],['etatbl','État BL'],['planliv','Planning Livraison'],['articles','Articles'],['materiel','Matériel (pistolets)']]},
   trt:   {label:'Traitement',        tabs:[['trait','Fiche traitement'],['etattrait','État Traitement'],['echeances','Échéances']]},
   achats:{label:'Achats',           tabs:[['demachat','Demande d\'achat'],['suiviachat','Suivi achats']]},
-  layout:{label:'Layout Zone 1',     tabs:[['layout','Postes & Pistolets']]},
+  layout:{label:'Layout Zone 1',     tabs:[['layout','Postes & Pistolets'],['layoutedit','Éditeur plan']]},
   config:{label:'Config',           tabs:[['objectifs','Objectifs'],['import','Import Excel'],['reglages','Réglages']]}
 };
 let ROLE=null, CURMOD=null;
@@ -2187,6 +2214,7 @@ function onEnter(v){
   if(v==='suiviachat') initSuiviAchat();
   if(v==='layout') initLayout();
   if(v==='materiel') initMateriel();
+  if(v==='layoutedit') initPlanEditor();
 }
 
 /* ================= BOOTSTRAP ================= */
@@ -5269,6 +5297,50 @@ function mtRender(){ const rows=mtFiltered().sort(function(a,b){return String(a.
     +rows.map(function(m){return '<tr><td><b>'+esc(m.Ref)+'</b></td><td>'+esc(m.Designation||'')+'</td><td>'+mtBadge(m.Etat)+'</td><td>'+esc(m.Poste||'—')+'</td><td>'+esc(m.Commentaire||'')+'</td><td style="white-space:nowrap"><button class="btn sm ghost" onclick="mtEdit(\''+esc(m.Ref)+'\')">✎</button> <button class="btn link" onclick="mtDelete(\''+esc(m.Ref)+'\')">✕</button></td></tr>';}).join('')+'</tbody></table></div>'
     :'<div class="empty">Aucun pistolet. Ajoute-les ci-dessus.</div>'; }
 function mtExcel(){ if(!MAT.length){toast('Rien à exporter','err');return;} exportExcel(MAT.map(function(m){return {Ref:m.Ref,Designation:m.Designation||'',Etat:m.Etat||'',Poste:m.Poste||'',Commentaire:m.Commentaire||''};}),'Materiel','Materiel_pistolets.xlsx'); }
+
+/* ================= ÉDITEUR DE PLAN INTERACTIF ================= */
+let PLAN={elements:[]}, PLAN_SEL=null;
+const PLAN_TYPES={ machine:{label:'Machine',color:'#3b5569'}, poste:{label:'Poste',color:'#2e7d55'}, scrap:{label:'Scrap',color:'#c0612a'}, stock:{label:'Stock',color:'#7a5230'}, zone:{label:'Zone',color:'#9aa89a'}, bureau:{label:'Bureau',color:'#555f6b'}, entree:{label:'Entrée',color:'#b02a2a'}, texte:{label:'Texte',color:'transparent'} };
+function initPlanEditor(){ api('getLayoutPlan',{}).then(function(r){ PLAN=(r.data&&r.data.elements)?r.data:{elements:[]}; PLAN_SEL=null; planRender(); planSelPanel(); }).catch(function(){ PLAN={elements:[]}; planRender(); }); }
+function planUID(){ return 'E'+Date.now().toString(36)+Math.floor(Math.random()*999).toString(36); }
+function planAdd(){ const t=document.getElementById('plType').value; const td=PLAN_TYPES[t]||PLAN_TYPES.machine;
+  const e={id:planUID(), type:t, label:td.label, x:42, y:42, w:(t==='texte'?14:16), h:(t==='texte'?6:9), color:td.color};
+  PLAN.elements.push(e); PLAN_SEL=e.id; planRender(); planSelPanel(); }
+function planRender(){ const c=document.getElementById('planCanvas'); if(!c)return;
+  const wrap=document.getElementById('planWrap'); if(wrap){ const bg=document.getElementById('plBg'); wrap.style.backgroundImage=(bg&&bg.checked)?('url('+LAYOUT_IMG+')'):'none'; wrap.style.backgroundSize='100% 100%'; }
+  c.innerHTML=(PLAN.elements||[]).map(function(e){ const sel=e.id===PLAN_SEL; const isTxt=e.type==='texte';
+    const bg=isTxt?'rgba(255,255,255,.6)':(e.color||'#3b5569'); const col=isTxt?'#1a2a1f':'#fff'; const bd=isTxt?'1px dashed #999':'none';
+    return '<div class="plan-el" data-id="'+e.id+'" style="left:'+e.x+'%;top:'+e.y+'%;width:'+e.w+'%;height:'+e.h+'%;background:'+bg+';color:'+col+';border:'+bd+';'+(sel?'outline:3px solid #c98a3a;z-index:5':'')+'">'
+      +'<span>'+esc(e.label||'')+'</span>'+(sel?'<span class="plan-rz" data-id="'+e.id+'"></span>':'')+'</div>';
+  }).join(''); }
+function planFind(id){ return (PLAN.elements||[]).find(function(x){return x.id===id;}); }
+function planDown(ev){ const rz=ev.target.closest('.plan-rz'); const elDiv=ev.target.closest('.plan-el'); if(!elDiv)return;
+  const id=elDiv.dataset.id; PLAN_SEL=id; const e=planFind(id); if(!e)return;
+  const canvas=document.getElementById('planCanvas'); const rect=canvas.getBoundingClientRect();
+  const mode=rz?'resize':'move'; const sx=ev.clientX, sy=ev.clientY, ox=e.x, oy=e.y, ow=e.w, oh=e.h; ev.preventDefault();
+  function mv(m){ const dx=(m.clientX-sx)/rect.width*100, dy=(m.clientY-sy)/rect.height*100;
+    if(mode==='move'){ e.x=Math.max(0,Math.min(100-e.w,ox+dx)); e.y=Math.max(0,Math.min(100-e.h,oy+dy)); }
+    else { e.w=Math.max(3,Math.min(100-e.x,ow+dx)); e.h=Math.max(3,Math.min(100-e.y,oh+dy)); } planRender(); }
+  function up(){ document.removeEventListener('pointermove',mv); document.removeEventListener('pointerup',up); planSelPanel(); }
+  document.addEventListener('pointermove',mv); document.addEventListener('pointerup',up); planSelPanel(); }
+function planSelPanel(){ const p=document.getElementById('planPanel'); if(!p)return; const e=planFind(PLAN_SEL);
+  if(!e){ p.innerHTML='<div style="color:var(--muted);font-size:13px">Clique un élément pour le modifier, ou ajoute-en un.</div>'; return; }
+  p.innerHTML='<div class="card" style="margin:0;padding:12px"><div class="grid g3">'
+    +'<div class="field"><label>Texte / nom</label><input id="plElLbl" value="'+esc(e.label||'')+'" oninput="planLbl(this.value)"></div>'
+    +'<div class="field"><label>Type</label><select onchange="planType(this.value)">'+Object.keys(PLAN_TYPES).map(function(k){return '<option value="'+k+'"'+(k===e.type?' selected':'')+'>'+PLAN_TYPES[k].label+'</option>';}).join('')+'</select></div>'
+    +'<div class="field" style="align-self:end;display:flex;gap:8px"><button class="btn ghost sm" onclick="planDup()">Dupliquer</button><button class="btn link" onclick="planDel()">Supprimer</button></div>'
+    +'</div></div>'; }
+function planLbl(v){ const e=planFind(PLAN_SEL); if(e){ e.label=v; planRender(); } }
+function planType(t){ const e=planFind(PLAN_SEL); if(e){ e.type=t; e.color=(PLAN_TYPES[t]||{}).color; planRender(); } }
+function planDup(){ const e=planFind(PLAN_SEL); if(!e)return; const n=Object.assign({},e,{id:planUID(),x:Math.min(84,e.x+4),y:Math.min(88,e.y+4)}); PLAN.elements.push(n); PLAN_SEL=n.id; planRender(); planSelPanel(); }
+function planDel(){ if(!PLAN_SEL)return; PLAN.elements=PLAN.elements.filter(function(x){return x.id!==PLAN_SEL;}); PLAN_SEL=null; planRender(); planSelPanel(); }
+function planClear(){ if(!confirm('Vider tout le plan ?'))return; PLAN={elements:[]}; PLAN_SEL=null; planRender(); planSelPanel(); }
+function planSave(){ api('saveLayoutPlan',{password:ADMIN_PWD,data:PLAN}).then(function(){ toast('Plan enregistré ✔','ok'); }).catch(function(e){ toast(e.message||'Erreur','err'); }); }
+function planSeed(){ if((PLAN.elements||[]).length && !confirm('Ajouter les zones de base par-dessus l\'existant ?')) return;
+  const S0=[['zone','ZONE 01',55,22,34,42],['stock','1m wood stock',4,22,12,16],['scrap','SCRAP',4,52,12,22],['bureau','Cantine',38,22,10,16],['bureau','Atelier',38,40,10,14],['scrap','SCRAP',40,60,10,8],['stock','Stock finished + heated',62,70,24,12],['stock','Temporary stock',54,20,22,4],['zone','PORT BSL',90,22,8,52],['stock','Recycled wood stock',74,90,20,8],['entree','Entrée',6,10,7,5]];
+  S0.forEach(function(a){ PLAN.elements.push({id:planUID(),type:a[0],label:a[1],x:a[2],y:a[3],w:a[4],h:a[5],color:(PLAN_TYPES[a[0]]||{}).color}); });
+  planRender(); toast('Zones de base ajoutées — ajuste-les','ok'); }
+(function(){ const c=document.getElementById('planCanvas'); if(c) c.addEventListener('pointerdown',planDown); })();
 
 /* ================= CERTIFICATS (absence) ================= */
 let CERTS=[];
